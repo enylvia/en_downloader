@@ -19,6 +19,21 @@ import (
 	"enylvia-downloader/internal/window"
 )
 
+var (
+	kernel32DLL       = syscall.NewLazyDLL("kernel32.dll")
+	procFreeConsole   = kernel32DLL.NewProc("FreeConsole")
+	procAttachConsole = kernel32DLL.NewProc("AttachConsole")
+)
+
+func hideConsole() {
+	_, _, _ = procFreeConsole.Call()
+}
+
+func attachParentConsole() {
+	const attachParentProcess = ^uintptr(0) // DWORD(-1)
+	_, _, _ = procAttachConsole.Call(attachParentProcess)
+}
+
 func main() {
 	// 0. Immediate Check: Edge / Chromium Native Messaging Host Invocation
 	for _, arg := range os.Args[1:] {
@@ -43,6 +58,14 @@ func main() {
 	isTray := flag.Bool("tray", false, "Alias for -minimized")
 	customPort := flag.Int("port", 0, "Custom HTTP port")
 	flag.Parse()
+
+	// If command-line maintenance flags are provided, attach to parent terminal
+	if *installEdge || *installAutoStart || *uninstallAutoStart {
+		attachParentConsole()
+	} else {
+		// Pure desktop application mode: detach and hide console window completely
+		hideConsole()
+	}
 
 	cfgMgr, err := app.NewConfigManager()
 	if err != nil {
