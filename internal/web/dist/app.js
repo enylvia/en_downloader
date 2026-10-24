@@ -482,12 +482,28 @@ async function resumeTask(id, e) {
 
 async function openFile(id, e) {
   if (e) e.stopPropagation();
-  await fetch(`/api/tasks/open-file?id=${id}`, { method: 'POST' });
+  try {
+    const res = await fetch(`/api/tasks/open-file?id=${id}`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      showToast('Gagal membuka berkas: ' + (data.error || 'Berkas belum selesai atau tidak ditemukan'));
+    }
+  } catch (err) {
+    showToast('Error: ' + err.message);
+  }
 }
 
 async function openFolder(id, e) {
   if (e) e.stopPropagation();
-  await fetch(`/api/tasks/open-folder?id=${id}`, { method: 'POST' });
+  try {
+    const res = await fetch(`/api/tasks/open-folder?id=${id}`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      showToast('Gagal membuka folder: ' + (data.error || 'Terjadi kesalahan'));
+    }
+  } catch (err) {
+    showToast('Error: ' + err.message);
+  }
 }
 
 let pendingDeleteId = null;

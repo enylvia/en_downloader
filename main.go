@@ -176,8 +176,8 @@ func main() {
 			}
 		},
 		OnOpenFolder: func() {
+			_ = os.MkdirAll(cfg.DownloadDir, 0755)
 			cmd := exec.Command("explorer.exe", cfg.DownloadDir)
-			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}
 			_ = cmd.Start()
 		},
 		OnExit: func() {

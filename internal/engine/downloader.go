@@ -824,16 +824,21 @@ func (dm *DownloadManager) OpenFolder(id string) error {
 		return err
 	}
 
-	targetPath := task.SavePath
-	arg := fmt.Sprintf("/select,%s", targetPath)
-	if _, err := os.Stat(targetPath); err != nil {
-		arg = filepath.Dir(targetPath)
+	targetPath := filepath.Clean(task.SavePath)
+	dir := filepath.Dir(targetPath)
+	_ = os.MkdirAll(dir, 0755)
+
+	var cmd *exec.Cmd
+	if _, err := os.Stat(targetPath); err == nil {
+		// File physically exists on disk: Open folder and select/highlight the file
+		cmd = exec.Command("explorer.exe")
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			CmdLine: fmt.Sprintf(`explorer.exe /select,"%s"`, targetPath),
+		}
+	} else {
+		// File not created yet or in progress: Open destination folder directly
+		cmd = exec.Command("explorer.exe", dir)
 	}
 
-	cmd := exec.Command("explorer.exe", arg)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow:    true,
-		CreationFlags: 0x08000000,
-	}
 	return cmd.Start()
 }
