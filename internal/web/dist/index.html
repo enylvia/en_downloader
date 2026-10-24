@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EnylviaDownloader</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="desktop-app">
+  <div class="window-container">
+    <!-- Top Minimalist Titlebar / Navigation -->
+    <header class="titlebar" id="titlebar">
+      <div class="titlebar-left">
+        <div class="brand">
+          <div class="brand-logo">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+              <path d="M2 17l10 5 10-5"></path>
+              <path d="M2 12l10 5 10-5"></path>
+            </svg>
+          </div>
+          <span class="brand-name">EnylviaDownloader</span>
+        </div>
+
+        <div class="engine-indicator">
+          <span class="indicator-dot"></span>
+          <span>Mesin Aktif</span>
+        </div>
+
+        <div class="titlebar-actions">
+          <button id="tb-resume-all" class="tb-btn" title="Lanjutkan Semua Unduhan">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            Lanjutkan Semua
+          </button>
+          <button id="tb-pause-all" class="tb-btn" title="Jeda Semua Unduhan">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+            Jeda Semua
+          </button>
+          <button id="tb-clear-completed" class="tb-btn" title="Hapus Unduhan Selesai">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            Hapus Selesai
+          </button>
+          <div class="dropdown-wrap">
+            <button id="tb-speed-limit" class="tb-btn" title="Atur Batas Kecepatan">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span>Batas: <strong id="tb-speed-limit-val">Tanpa Batas</strong></span>
+            </button>
+            <div id="speed-limit-menu" class="dropdown-menu">
+              <div class="dropdown-item" data-limit="0">Tanpa Batas (Maksimal)</div>
+              <div class="dropdown-item" data-limit="512">512 KB/s</div>
+              <div class="dropdown-item" data-limit="1024">1.0 MB/s</div>
+              <div class="dropdown-item" data-limit="2048">2.0 MB/s</div>
+              <div class="dropdown-item" data-limit="5120">5.0 MB/s</div>
+              <div class="dropdown-item" data-limit="10240">10.0 MB/s</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="titlebar-right">
+        <!-- Minimalist Compact Search Box -->
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" id="task-search-input" placeholder="Cari... (Ctrl+F)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          <span class="search-shortcut">⌘F</span>
+        </div>
+
+        <button id="btn-add-url-top" class="tb-btn primary-btn" title="Tambah URL Download">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          Tambah
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="app-body">
+      <!-- Left Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+          <span>Active Engine</span>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-title">STATUS UNDUHAN</div>
+          <ul class="nav-list">
+            <li class="nav-item active" data-filter="all">
+              <span class="item-icon-wrap">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+              </span>
+              <span class="item-label">Semua Unduhan</span>
+              <span id="badge-all" class="badge">0</span>
+            </li>
+            <li class="nav-item" data-filter="downloading">
+              <span class="item-icon-wrap">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              </span>
+              <span class="item-label">Sedang Mengunduh</span>
+              <span id="badge-downloading" class="badge">0</span>
+            </li>
+            <li class="nav-item" data-filter="completed">
+              <span class="item-icon-wrap">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </span>
+              <span class="item-label">Selesai</span>
+              <span id="badge-completed" class="badge">0</span>
+            </li>
+            <li class="nav-item" data-filter="queued">
+              <span class="item-icon-wrap">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              </span>
+              <span class="item-label">Dalam Antrean</span>
+              <span id="badge-queued" class="badge">0</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-title">KATEGORI FILE</div>
+          <ul class="nav-list">
+            <li class="nav-item" data-cat="Video">
+              <span class="item-icon-wrap">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              </span>
+              <span class="item-label">Video</span>
+              <span id="cat-badge-video" class="badge-plain">0</span>
+            </li>
+            <li class="nav-item" data-cat="Music">
+              <span class="item-icon-wrap">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+              </span>
+              <span class="item-label">Audio</span>
+              <span id="cat-badge-music" class="badge-plain">0</span>
+            </li>
+            <li class="nav-item" data-cat="Documents">
+              <span class="item-icon-wrap">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+              </span>
+              <span class="item-label">Dokumen</span>
+              <span id="cat-badge-doc" class="badge-plain">0</span>
+            </li>
+            <li class="nav-item" data-cat="Compressed">
+              <span class="item-icon-wrap">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+              </span>
+              <span class="item-label">Arsip / ZIP</span>
+              <span id="cat-badge-zip" class="badge-plain">0</span>
+            </li>
+            <li class="nav-item" data-cat="Programs">
+              <span class="item-icon-wrap">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+              </span>
+              <span class="item-label">Program / ISO</span>
+              <span id="cat-badge-prog" class="badge-plain">0</span>
+            </li>
+            <li class="nav-item" data-cat="General">
+              <span class="item-icon-wrap">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+              </span>
+              <span class="item-label">Lainnya</span>
+              <span id="cat-badge-gen" class="badge-plain">0</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="sidebar-footer">
+          <!-- Drive Storage Widget -->
+          <div class="storage-widget">
+            <div class="storage-header">
+              <span class="storage-title">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"></rect><circle cx="12" cy="12" r="4"></circle><line x1="6" y1="6" x2="6.01" y2="6"></line></svg>
+                <span id="drive-label">NVMe SSD (D:)</span>
+              </span>
+              <span id="drive-pct" class="storage-pct">70%</span>
+            </div>
+            <div class="storage-bar">
+              <div id="drive-bar-fill" class="storage-bar-fill" style="width: 70%;"></div>
+            </div>
+            <div id="drive-capacity-text" class="storage-text">1.4 TB terpakai &bull; 2.0 TB total</div>
+          </div>
+
+          <!-- Browser Hook status (interactive & dynamic) -->
+          <div id="sidebar-hook-btn" class="hook-status clickable" title="Klik untuk cek status integrasi Microsoft Edge">
+            <span id="sidebar-hook-dot" class="hook-dot"></span>
+            <span>Browser Hook</span>
+            <span id="sidebar-hook-badge" class="hook-badge">Memeriksa...</span>
+          </div>
+
+          <div class="sidebar-actions">
+            <button id="btn-open-settings" class="sidebar-action-btn">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              Pengaturan Aplikasi
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Center Content -->
+      <main class="main-content">
+        <!-- Live Stats Strip -->
+        <div class="stats-strip">
+          <div class="stat-cell">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" class="cyan-icon"><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span id="live-down-speed" class="stat-num cyan-text">0.0 MB/s</span>
+          </div>
+          <div class="stat-cell">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" class="purple-icon"><polyline points="17 14 12 9 7 14"></polyline><line x1="12" y1="9" x2="12" y2="21"></line></svg>
+            <span id="live-up-speed" class="stat-num purple-text">2.1 MB/s</span>
+          </div>
+          <div class="stat-cell">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span id="live-uptime" class="stat-num">Aktif: 00j 00m</span>
+          </div>
+        </div>
+
+        <!-- Task List Area -->
+        <div class="task-list-wrapper">
+          <div id="tasks-cards-container" class="tasks-cards-container">
+            <!-- Dynamically populated download cards -->
+          </div>
+
+          <div id="empty-state" class="empty-state">
+            <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <h3>Belum Ada Unduhan Aktif</h3>
+            <p>Klik tombol <strong>"Tambah"</strong> di atas atau unduh file langsung dari Microsoft Edge.</p>
+          </div>
+        </div>
+
+        <!-- Bottom Panel: Inspektor Berkas (Hidden by default when no active/selected task) -->
+        <section class="inspector-panel" id="inspector-panel" style="display: none;">
+          <div class="inspector-header">
+            <div class="inspector-title-group">
+              <span class="inspector-label">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                Inspektor Berkas:
+              </span>
+              <span id="insp-filename-pill" class="pill-badge filename-pill">Pilih unduhan untuk inspeksi</span>
+              <span id="insp-conn-pill" class="pill-badge conn-pill">Koneksi HTTP/2 Multiplex (16 Sockets)</span>
+            </div>
+            <div class="inspector-stats-group">
+              <span>Kecepatan Rata-rata: <strong id="insp-avg-speed" class="white-text">-- MB/s</strong></span>
+              <span>Efisiensi Thread: <strong id="insp-thread-eff" class="cyan-text">99.4%</strong></span>
+            </div>
+          </div>
+
+          <div class="inspector-body">
+            <!-- Left: Blok Alokasi Segmen Multi-Thread -->
+            <div class="inspector-left">
+              <div class="sub-header">
+                <span class="cyan-dot"></span>
+                <span class="sub-title">Blok Alokasi Segmen Multi-Thread (16 Bagian Paralel)</span>
+                <span id="insp-chunk-size-label" class="sub-hint">Ukuran Potongan: 361.25 MB per Blok</span>
+              </div>
+
+              <div id="inspector-chunks-grid" class="chunks-block-grid">
+                <!-- 16 chunk cards dynamically rendered -->
+              </div>
+
+              <div class="save-path-row">
+                <span class="path-icon">📁 Simpan di:</span>
+                <span id="insp-save-path" class="path-text">D:\Downloads\ISOs\Linux\...</span>
+                <button id="btn-change-path" class="path-change-btn">Ganti Jalur ✏</button>
+              </div>
+            </div>
+
+            <!-- Right: Throughput Jaringan Real-Time Wave -->
+            <div class="inspector-right">
+              <div class="sub-header flex-between">
+                <div class="flex-align">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" class="cyan-icon"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                  <span class="sub-title">Throughput Jaringan Real-Time</span>
+                </div>
+                <span id="insp-realtime-speed" class="sub-speed cyan-text">0.0 MB/s</span>
+              </div>
+
+              <div class="canvas-wrap">
+                <canvas id="throughput-canvas" width="460" height="85"></canvas>
+              </div>
+
+              <div class="source-metadata">
+                <div class="meta-row">
+                  <span class="meta-label">URL Sumber:</span>
+                  <span id="insp-source-url" class="meta-val truncate">https://releases.ubuntu.com/noble/...</span>
+                </div>
+                <div class="meta-row">
+                  <span class="meta-label">Protokol & Server:</span>
+                  <span class="meta-val green-text">TLS 1.3 / Canonical CDN Global (Edge Fastly)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal: Tambah Download -->
+  <div id="modal-add" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Tambah Unduhan Baru</h2>
+        <button class="btn-close" data-close="modal-add">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form autocomplete="off" onsubmit="return false;" class="modal-form-wrap">
+          <div class="form-group">
+            <label for="input-url">URL Download <span class="required">*</span></label>
+            <div class="input-with-action">
+              <input type="text" id="input-url" placeholder="https://contoh.com/file.zip" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-form-type="other" data-lpignore="true" required autofocus>
+              <button id="btn-probe-url" class="btn btn-secondary" type="button">Periksa</button>
+            </div>
+            <span id="probe-status" class="hint-text"></span>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group flex-2">
+              <label for="input-filename">Nama File</label>
+              <input type="text" id="input-filename" placeholder="Otomatis terdeteksi dari server" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+            </div>
+            <div class="form-group flex-1">
+              <label for="input-threads">Jumlah Koneksi</label>
+              <select id="input-threads">
+                <option value="1">1 (Single Stream)</option>
+                <option value="4">4 Koneksi</option>
+                <option value="8" selected>8 Koneksi</option>
+                <option value="16">16 Koneksi (Rekomendasi)</option>
+                <option value="32">32 Koneksi (Maksimal)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="input-save-path">Folder Simpan</label>
+            <input type="text" id="input-save-path" placeholder="Default folder unduhan" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label>
+              <input type="checkbox" id="input-auto-start" checked>
+              Mulai unduhan sekarang
+            </label>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modal-add">Batal</button>
+        <button id="btn-submit-download" class="btn btn-primary">Unduh Sekarang</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Pengaturan -->
+  <div id="modal-settings" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Pengaturan EnylviaDownloader</h2>
+        <button class="btn-close" data-close="modal-settings">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form autocomplete="off" onsubmit="return false;" class="modal-form-wrap">
+          <div class="form-group">
+            <label for="cfg-download-dir">Folder Default Download</label>
+            <input type="text" id="cfg-download-dir" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="cfg-max-concurrent">Maksimal Download Bersamaan</label>
+              <input type="number" id="cfg-max-concurrent" min="1" max="10" autocomplete="off">
+            </div>
+            <div class="form-group flex-1">
+              <label for="cfg-default-conns">Default Jumlah Koneksi</label>
+              <select id="cfg-default-conns">
+                <option value="4">4</option>
+                <option value="8">8</option>
+                <option value="16">16</option>
+                <option value="32">32</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label>
+              <input type="checkbox" id="cfg-autostart-toggle">
+              Jalankan otomatis saat Windows Startup (Minimize ke System Tray)
+            </label>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label>
+              <input type="checkbox" id="cfg-auto-categorize">
+              Kelompokkan file otomatis ke subfolder (Compressed, Video, Music, dll.)
+            </label>
+          </div>
+
+          <div class="settings-section">
+            <h3>Integrasi Microsoft Edge</h3>
+            <p class="hint-text">Daftarkan Native Messaging Host ke Registry Windows agar ekstensi Microsoft Edge otomatis terhubung.</p>
+            <div class="edge-integration-box">
+              <div id="edge-status-indicator" class="status-indicator">
+                <span id="edge-modal-dot" class="status-dot"></span>
+                <span id="edge-status-text">Memeriksa status...</span>
+              </div>
+              <div class="edge-action-btns">
+                <button type="button" id="btn-install-edge" class="btn btn-primary btn-sm">Daftarkan ke Microsoft Edge</button>
+                <button type="button" id="btn-test-edge" class="btn btn-secondary btn-sm">Uji Unduhan Langsung</button>
+              </div>
+            </div>
+            <p id="edge-help-hint" class="hint-text sub-hint">
+              Tips: Setelah ekstensi dipasang/diperbarui, buka <code>edge://extensions</code> lalu klik tombol reload (ikon panah melingkar) pada EnylviaDownloader.
+            </p>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modal-settings">Batal</button>
+        <button id="btn-save-settings" class="btn btn-primary">Simpan Pengaturan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Konfirmasi Hapus Unduhan -->
+  <div id="modal-delete" class="modal-backdrop">
+    <div class="modal modal-delete-wrap">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ef4444" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+          <h2>Hapus Unduhan</h2>
+        </div>
+        <button class="btn-close" data-close="modal-delete">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc-text">Apakah Anda yakin ingin menghapus item ini?</p>
+        <div class="delete-item-preview">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <span id="delete-target-filename" class="delete-filename-text">-</span>
+        </div>
+        <div class="delete-disk-option">
+          <label class="custom-checkbox-row">
+            <input type="checkbox" id="delete-file-disk">
+            <span class="custom-checkbox-label">
+              <span class="checkbox-title">Hapus juga file fisik dari disk</span>
+              <span class="checkbox-sub">File yang sudah tersimpan di hard disk akan dihapus secara permanen.</span>
+            </span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modal-delete">Batal</button>
+        <button id="btn-confirm-delete" class="btn btn-danger">Hapus Unduhan</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "EnylviaDownloader - Edge Integration",
+  "version": "1.0.0",
+  "description": "Integrasi download manager EnylviaDownloader untuk Microsoft Edge. Multi-connection range downloading berkecepatan tinggi.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApeGf+4xhZxR6NlDFjlpO71rX2KIA44fkwa8vXGN6via7n9d/uS7z8KwvvXd9SbmacwSS0zm8pLeQmG2z8EsZ0OlqOP3nT5X1lB1eqh5htttpgwZUrSXc6Uwjwprqoff90sbRTS1eNes9Yy7wT5STy8TzmGzTkG6yU08VrXUk0juGUg7f708QtfytBdABHCtLCUDH//WMDZ/cncn/PTR6vBz1ovJ6YZQR+ANKcn7/xbshSKgQatVAoMrLv79guWEz02bAAR6fyNjIVSCLTaoPJnPtDpO4N85VkcDc9FrqP4gLSgBHNemXAktwoUSzK2MNgSl+50pBIvN2wxLropO/7QIDAQAB",
+  "permissions": [
+    "contextMenus",
+    "downloads",
+    "storage",
+    "nativeMessaging",
+    "notifications",
+    "cookies"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://127.0.0.1:4242/*",
+    "http://localhost:4242/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "EnylviaDownloader"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
