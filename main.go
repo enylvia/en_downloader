@@ -192,7 +192,8 @@ func main() {
 	go func() {
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-		<-sigChan
+		sig := <-sigChan
+		log.Printf("[INFO] Shutdown signal received: %v", sig)
 
 		dm.Stop()
 		_ = store.Save(dm.GetTasks())
