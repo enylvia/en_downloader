@@ -46,8 +46,12 @@ document.addEventListener("click", (e) => {
   }
 
   if (isDownloadable) {
+    if (anchor.target === "_blank") {
+      anchor.target = "_self";
+    }
     e.preventDefault();
     e.stopPropagation();
+    e.stopImmediatePropagation();
 
     showOnPageToast(`Mengalihkan unduhan ${filename || "file"} ke EnylviaDownloader...`);
 

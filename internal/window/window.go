@@ -88,16 +88,32 @@ func (wm *WindowManager) prepareCleanProfile(profileDir string) {
 	}
 }
 
+func isEdgeProfileLocked(profileDir string) bool {
+	lockPath := filepath.Join(profileDir, "lockfile")
+	if _, err := os.Stat(lockPath); err != nil {
+		return false
+	}
+	file, err := os.OpenFile(lockPath, os.O_WRONLY, 0666)
+	if err != nil {
+		// File is in use by running Edge process
+		return true
+	}
+	_ = file.Close()
+	return false
+}
+
 func (wm *WindowManager) OpenWindow() error {
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
 
-	// If already open and process is alive
-	if wm.cmd != nil && wm.cmd.Process != nil && wm.isWindowOpen {
+	profileDir := filepath.Join(wm.appDataDir, "edge_profile")
+
+	// If already open (process lock or marked open), do not spawn duplicate window
+	if wm.isWindowOpen || isEdgeProfileLocked(profileDir) {
+		wm.isWindowOpen = true
 		return nil
 	}
 
-	profileDir := filepath.Join(wm.appDataDir, "edge_profile")
 	wm.prepareCleanProfile(profileDir)
 
 	args := []string{

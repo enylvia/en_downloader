@@ -87,6 +87,19 @@ function extractFilename(item, url) {
   return name;
 }
 
+function closeTabIfBlankDownload(url) {
+  try {
+    chrome.tabs.query({}, (tabs) => {
+      if (!tabs) return;
+      for (const t of tabs) {
+        if (t.url === url || t.pendingUrl === url) {
+          chrome.tabs.remove(t.id);
+        }
+      }
+    });
+  } catch (e) {}
+}
+
 // 1. Primary Interceptor: onCreated
 chrome.downloads.onCreated.addListener((item) => {
   if (!interceptEnabled) return;
@@ -107,10 +120,11 @@ chrome.downloads.onCreated.addListener((item) => {
     recentlyIntercepted.delete(url);
   }, 1500);
 
-  // Cancel Edge download immediately
+  // Cancel Edge download immediately and close any popup/blank tab opened for this download
   chrome.downloads.cancel(item.id, () => {
     chrome.downloads.erase({ id: item.id }, () => {});
   });
+  closeTabIfBlankDownload(url);
 
   const filename = extractFilename(item, url);
   sendDownloadToEnylvia(url, filename, item.referrer || "");
@@ -144,6 +158,7 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
   chrome.downloads.cancel(item.id, () => {
     chrome.downloads.erase({ id: item.id }, () => {});
   });
+  closeTabIfBlankDownload(url);
 
   const filename = extractFilename(item, url);
   sendDownloadToEnylvia(url, filename, item.referrer || "");

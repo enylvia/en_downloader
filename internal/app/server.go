@@ -236,10 +236,6 @@ func (s *Server) handleAddTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.onShowWindow != nil {
-		go s.onShowWindow()
-	}
-
 	jsonResponse(w, http.StatusCreated, map[string]any{"task": task})
 }
 
