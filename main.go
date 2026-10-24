@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -21,13 +22,8 @@ import (
 
 var (
 	kernel32DLL       = syscall.NewLazyDLL("kernel32.dll")
-	procFreeConsole   = kernel32DLL.NewProc("FreeConsole")
 	procAttachConsole = kernel32DLL.NewProc("AttachConsole")
 )
-
-func hideConsole() {
-	_, _, _ = procFreeConsole.Call()
-}
 
 func attachParentConsole() {
 	const attachParentProcess = ^uintptr(0) // DWORD(-1)
@@ -62,15 +58,19 @@ func main() {
 	// If command-line maintenance flags are provided, attach to parent terminal
 	if *installEdge || *installAutoStart || *uninstallAutoStart {
 		attachParentConsole()
-	} else {
-		// Pure desktop application mode: detach and hide console window completely
-		hideConsole()
 	}
 
 	cfgMgr, err := app.NewConfigManager()
 	if err != nil {
 		log.Fatalf("Failed to initialize configuration: %v", err)
 	}
+
+	// Setup logging to file in AppData
+	logPath := filepath.Join(cfgMgr.AppDataDir(), "app.log")
+	if logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+		log.SetOutput(logFile)
+	}
+	log.Printf("[INFO] EnylviaDownloader starting (PID %d)...", os.Getpid())
 
 	cfg := cfgMgr.Get()
 	port := cfg.Port
@@ -114,6 +114,16 @@ func main() {
 	}
 
 	startMinimized := *isMinimized || *isTray
+
+	// Single-instance check: If EnylviaDownloader is already running, show existing window and exit cleanly
+	checkClient := &http.Client{Timeout: 600 * time.Millisecond}
+	if resp, err := checkClient.Get(fmt.Sprintf("http://127.0.0.1:%d/api/config", port)); err == nil {
+		_ = resp.Body.Close()
+		if !startMinimized {
+			_, _ = checkClient.Post(fmt.Sprintf("http://127.0.0.1:%d/api/window/show", port), "application/json", nil)
+		}
+		os.Exit(0)
+	}
 
 	// 4. Initialize Core Engine & Store
 	store := app.NewTaskStore(cfgMgr.AppDataDir())

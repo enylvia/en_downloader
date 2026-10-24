@@ -98,6 +98,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/system/autostart", s.handleAutoStart)
 	mux.HandleFunc("/api/window/minimize", s.handleWindowMinimize)
 	mux.HandleFunc("/api/window/close", s.handleWindowClose)
+	mux.HandleFunc("/api/window/show", s.handleWindowShow)
 
 	mux.HandleFunc("/api/edge/status", s.handleEdgeStatus)
 	mux.HandleFunc("/api/edge/install", s.handleEdgeInstall)
@@ -376,6 +377,13 @@ func (s *Server) handleWindowClose(w http.ResponseWriter, r *http.Request) {
 	if s.onHideWindow != nil {
 		s.onHideWindow()
 		tray.ShowBalloonNotification("EnylviaDownloader", "Aplikasi diminimalkan ke System Tray. Klik ikon untuk membukanya kembali.")
+	}
+	jsonResponse(w, http.StatusOK, map[string]bool{"success": true})
+}
+
+func (s *Server) handleWindowShow(w http.ResponseWriter, r *http.Request) {
+	if s.onShowWindow != nil {
+		go s.onShowWindow()
 	}
 	jsonResponse(w, http.StatusOK, map[string]bool{"success": true})
 }
