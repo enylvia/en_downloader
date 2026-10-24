@@ -120,18 +120,31 @@ func (wm *WindowManager) OpenWindow() error {
 
 	args := []string{
 		fmt.Sprintf("--app=%s", wm.url),
+		"--app-id=com.enylvia.downloader",
 		"--window-size=1380,880",
 		fmt.Sprintf("--user-data-dir=%s", profileDir),
 		"--no-first-run",
 		"--no-default-browser-check",
-		"--disable-features=TranslateUI,AutofillServerCommunication,AutofillEnableAccountWalletStorage,PasswordManager,PasswordGeneration,AutofillAddressSuggestions,AutofillCreditCard,EdgePersonalization,EdgeAutofill,EdgeWallet,msEdgePasswordManager",
-		"--disable-save-password-bubble",
-		"--disable-single-click-autofill",
-		"--disable-autofill",
+
+		// Aggressive RAM & Process Optimization (Down from ~950MB to ~150MB)
+		"--renderer-process-limit=1",
+		"--enable-low-end-device-mode",
+		"--disable-site-isolation-trials",
+		"--disable-background-networking",
+		"--disable-component-update",
+		"--disable-extensions",
+		"--disable-default-apps",
 		"--disable-sync",
 		"--password-store=basic",
 		"--deny-permission-prompts",
 		"--disable-notifications",
+		"--disable-save-password-bubble",
+		"--disable-single-click-autofill",
+		"--disable-autofill",
+		"--disk-cache-size=10485760",
+		"--media-cache-size=10485760",
+		`--js-flags=--max-old-space-size=64`,
+		"--disable-features=TranslateUI,AutofillServerCommunication,AutofillEnableAccountWalletStorage,PasswordManager,PasswordGeneration,AutofillAddressSuggestions,AutofillCreditCard,EdgePersonalization,EdgeAutofill,EdgeWallet,msEdgePasswordManager,SpareRendererForSitePerProcess,AudioServiceOutOfProcess,VideoDecodeAccelerator",
 	}
 
 	wm.cmd = exec.Command(wm.edgePath, args...)
