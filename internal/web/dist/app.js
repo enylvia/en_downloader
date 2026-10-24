@@ -143,7 +143,7 @@ function renderTasks() {
     }
 
     return `
-      <div class="task-card ${isSelected ? 'active-selected' : ''} ${t.status}" onclick="selectTask('${t.id}')">
+      <div class="task-card ${isSelected ? 'active-selected' : ''} ${t.status}" onclick="selectTask('${t.id}')" oncontextmenu="handleTaskContextMenu(event, '${t.id}')" data-task-id="${t.id}">
         <div class="card-icon">
           ${iconSvg}
         </div>
@@ -533,6 +533,148 @@ document.getElementById('btn-confirm-delete').addEventListener('click', async ()
   }
 });
 
+// Custom Desktop Context Menu Logic
+let contextTargetTaskId = null;
+
+function handleTaskContextMenu(e, id) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  selectTask(id);
+  contextTargetTaskId = id;
+
+  const task = allTasks.find(t => t.id === id);
+  if (!task) return;
+
+  const menu = document.getElementById('custom-context-menu');
+  if (!menu) return;
+
+  // Toggle item visibility / disabled states based on task status
+  const btnResume = document.getElementById('ctx-resume');
+  const btnPause = document.getElementById('ctx-pause');
+  const btnRetry = document.getElementById('ctx-retry');
+  const btnOpenFile = document.getElementById('ctx-open-file');
+
+  if (btnResume) {
+    btnResume.style.display = (task.status === 'paused' || task.status === 'queued') ? 'flex' : 'none';
+  }
+  if (btnPause) {
+    btnPause.style.display = (task.status === 'downloading' || task.status === 'connecting') ? 'flex' : 'none';
+  }
+  if (btnRetry) {
+    btnRetry.style.display = (task.status === 'error') ? 'flex' : 'none';
+  }
+  if (btnOpenFile) {
+    btnOpenFile.style.display = (task.status === 'completed') ? 'flex' : 'none';
+  }
+
+  // Position context menu ensuring it stays inside the viewport
+  menu.style.display = 'block';
+  const menuWidth = 210;
+  const menuHeight = menu.offsetHeight || 220;
+
+  let x = e.clientX;
+  let y = e.clientY;
+
+  if (x + menuWidth > window.innerWidth) {
+    x = window.innerWidth - menuWidth - 10;
+  }
+  if (y + menuHeight > window.innerHeight) {
+    y = window.innerHeight - menuHeight - 10;
+  }
+
+  menu.style.left = `${Math.max(10, x)}px`;
+  menu.style.top = `${Math.max(10, y)}px`;
+}
+
+function hideTaskContextMenu() {
+  const menu = document.getElementById('custom-context-menu');
+  if (menu) menu.style.display = 'none';
+  contextTargetTaskId = null;
+}
+
+// Global click & contextmenu handlers
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#custom-context-menu')) {
+    hideTaskContextMenu();
+  }
+});
+
+window.addEventListener('blur', () => {
+  hideTaskContextMenu();
+});
+
+// Suppress default browser right-click context menu everywhere except editable inputs
+document.addEventListener('contextmenu', (e) => {
+  const target = e.target;
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+    return; // Allow native copy/paste for text inputs
+  }
+  if (!target.closest('.task-card')) {
+    e.preventDefault();
+    hideTaskContextMenu();
+  }
+});
+
+// Wire up context menu actions
+const ctxResume = document.getElementById('ctx-resume');
+if (ctxResume) {
+  ctxResume.addEventListener('click', () => {
+    if (contextTargetTaskId) resumeTask(contextTargetTaskId);
+    hideTaskContextMenu();
+  });
+}
+const ctxPause = document.getElementById('ctx-pause');
+if (ctxPause) {
+  ctxPause.addEventListener('click', () => {
+    if (contextTargetTaskId) pauseTask(contextTargetTaskId);
+    hideTaskContextMenu();
+  });
+}
+const ctxRetry = document.getElementById('ctx-retry');
+if (ctxRetry) {
+  ctxRetry.addEventListener('click', () => {
+    if (contextTargetTaskId) retryTask(contextTargetTaskId);
+    hideTaskContextMenu();
+  });
+}
+const ctxOpenFile = document.getElementById('ctx-open-file');
+if (ctxOpenFile) {
+  ctxOpenFile.addEventListener('click', () => {
+    if (contextTargetTaskId) openFile(contextTargetTaskId);
+    hideTaskContextMenu();
+  });
+}
+const ctxOpenFolder = document.getElementById('ctx-open-folder');
+if (ctxOpenFolder) {
+  ctxOpenFolder.addEventListener('click', () => {
+    if (contextTargetTaskId) openFolder(contextTargetTaskId);
+    hideTaskContextMenu();
+  });
+}
+const ctxCopyUrl = document.getElementById('ctx-copy-url');
+if (ctxCopyUrl) {
+  ctxCopyUrl.addEventListener('click', () => {
+    if (contextTargetTaskId) {
+      const task = allTasks.find(t => t.id === contextTargetTaskId);
+      if (task && task.url) {
+        navigator.clipboard.writeText(task.url);
+        showToast('URL unduhan disalin ke clipboard');
+      }
+    }
+    hideTaskContextMenu();
+  });
+}
+const ctxDelete = document.getElementById('ctx-delete');
+if (ctxDelete) {
+  ctxDelete.addEventListener('click', () => {
+    if (contextTargetTaskId) {
+      deleteTaskPrompt(contextTargetTaskId);
+    }
+    hideTaskContextMenu();
+  });
+}
+
 // Search Filter
 document.getElementById('task-search-input').addEventListener('input', (e) => {
   searchQuery = e.target.value.trim();
@@ -568,12 +710,16 @@ document.getElementById('btn-add-url-top').addEventListener('click', async () =>
   document.getElementById('probe-status').innerText = '';
   document.getElementById('modal-add').classList.add('open');
 
-  // Auto-paste valid URL from clipboard like IDM
+  // Auto-paste valid URL from clipboard natively via backend API (no browser permission prompt)
   try {
-    const clipText = await navigator.clipboard.readText();
-    if (clipText && (clipText.startsWith('http://') || clipText.startsWith('https://'))) {
-      urlInput.value = clipText.trim();
-      document.getElementById('btn-probe-url').click();
+    const clipRes = await fetch('/api/system/clipboard');
+    if (clipRes.ok) {
+      const clipData = await clipRes.json();
+      const clipText = clipData.text ? clipData.text.trim() : '';
+      if (clipText && (clipText.startsWith('http://') || clipText.startsWith('https://'))) {
+        urlInput.value = clipText;
+        document.getElementById('btn-probe-url').click();
+      }
     }
   } catch (e) {}
 

@@ -457,6 +457,40 @@
     </div>
   </div>
 
+  <!-- Custom Desktop Context Menu -->
+  <div id="custom-context-menu" class="custom-context-menu" style="display: none;">
+    <div class="ctx-item" id="ctx-resume">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+      <span>Lanjutkan</span>
+    </div>
+    <div class="ctx-item" id="ctx-pause">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+      <span>Jeda</span>
+    </div>
+    <div class="ctx-item" id="ctx-retry">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+      <span>Coba Lagi</span>
+    </div>
+    <div class="ctx-divider"></div>
+    <div class="ctx-item" id="ctx-open-file">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+      <span>Buka Berkas</span>
+    </div>
+    <div class="ctx-item" id="ctx-open-folder">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+      <span>Buka Folder Penyimpanan</span>
+    </div>
+    <div class="ctx-item" id="ctx-copy-url">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>Salin URL Unduhan</span>
+    </div>
+    <div class="ctx-divider"></div>
+    <div class="ctx-item ctx-danger" id="ctx-delete">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+      <span>Hapus dari Daftar...</span>
+    </div>
+  </div>
+
   <div id="toast-container" class="toast-container"></div>
   <script src="app.js"></script>
 </body>

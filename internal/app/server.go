@@ -96,6 +96,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/speed-limit", s.handleSpeedLimit)
 	mux.HandleFunc("/api/system/stats", s.handleSystemStats)
 	mux.HandleFunc("/api/system/autostart", s.handleAutoStart)
+	mux.HandleFunc("/api/system/clipboard", s.handleGetClipboard)
 	mux.HandleFunc("/api/window/minimize", s.handleWindowMinimize)
 	mux.HandleFunc("/api/window/close", s.handleWindowClose)
 	mux.HandleFunc("/api/window/show", s.handleWindowShow)
@@ -364,6 +365,11 @@ func (s *Server) handleAutoStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, map[string]bool{"auto_start": tray.IsAutoStartEnabled()})
+}
+
+func (s *Server) handleGetClipboard(w http.ResponseWriter, r *http.Request) {
+	text := GetClipboardText()
+	jsonResponse(w, http.StatusOK, map[string]string{"text": text})
 }
 
 func (s *Server) handleWindowMinimize(w http.ResponseWriter, r *http.Request) {

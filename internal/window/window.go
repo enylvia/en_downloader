@@ -69,6 +69,14 @@ func (wm *WindowManager) prepareCleanProfile(profileDir string) {
 	prefs["credentials_enable_service"] = false
 	prefs["profile"] = map[string]any{
 		"password_manager_enabled": false,
+		"content_settings": map[string]any{
+			"exceptions": map[string]any{
+				"clipboard": map[string]any{
+					"http://127.0.0.1:4242,*": map[string]any{"setting": 1},
+					"http://localhost:4242,*": map[string]any{"setting": 1},
+				},
+			},
+		},
 	}
 	prefs["sync"] = map[string]any{
 		"autofill":  false,
@@ -104,6 +112,8 @@ func (wm *WindowManager) OpenWindow() error {
 		"--disable-autofill",
 		"--disable-sync",
 		"--password-store=basic",
+		"--deny-permission-prompts",
+		"--disable-notifications",
 	}
 
 	wm.cmd = exec.Command(wm.edgePath, args...)
