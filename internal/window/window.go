@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"syscall"
+	"unsafe"
 )
 
 type WindowManager struct {
@@ -134,8 +136,17 @@ func (wm *WindowManager) OpenWindow() error {
 
 	wm.cmd = exec.Command(wm.edgePath, args...)
 	if err := wm.cmd.Start(); err != nil {
-		// Fallback to start via cmd
-		return exec.Command("cmd", "/c", "start", wm.url).Start()
+		// Fallback to ShellExecute without any console window
+		shell32 := syscall.NewLazyDLL("shell32.dll")
+		shellExecuteW := shell32.NewProc("ShellExecuteW")
+		uOp, _ := syscall.UTF16PtrFromString("open")
+		uURL, _ := syscall.UTF16PtrFromString(wm.url)
+		r, _, _ := shellExecuteW.Call(0, uintptr(unsafe.Pointer(uOp)), uintptr(unsafe.Pointer(uURL)), 0, 0, 1)
+		if r <= 32 {
+			return fmt.Errorf("failed to open window")
+		}
+		wm.isWindowOpen = true
+		return nil
 	}
 
 	wm.isWindowOpen = true

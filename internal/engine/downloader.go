@@ -16,7 +16,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
+	"unsafe"
 )
 
 type AddTaskOptions struct {
@@ -805,8 +807,15 @@ func (dm *DownloadManager) OpenFile(id string) error {
 		return fmt.Errorf("file not found on disk")
 	}
 
-	cmd := exec.Command("cmd", "/c", "start", "", task.SavePath)
-	return cmd.Start()
+	shell32 := syscall.NewLazyDLL("shell32.dll")
+	shellExecuteW := shell32.NewProc("ShellExecuteW")
+	uOp, _ := syscall.UTF16PtrFromString("open")
+	uPath, _ := syscall.UTF16PtrFromString(task.SavePath)
+	r, _, _ := shellExecuteW.Call(0, uintptr(unsafe.Pointer(uOp)), uintptr(unsafe.Pointer(uPath)), 0, 0, 1)
+	if r <= 32 {
+		return fmt.Errorf("failed to open file")
+	}
+	return nil
 }
 
 func (dm *DownloadManager) OpenFolder(id string) error {
@@ -814,12 +823,17 @@ func (dm *DownloadManager) OpenFolder(id string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(task.SavePath); err != nil {
-		// If file doesn't exist, open directory
-		dir := filepath.Dir(task.SavePath)
-		return exec.Command("explorer.exe", dir).Start()
+
+	targetPath := task.SavePath
+	arg := fmt.Sprintf("/select,%s", targetPath)
+	if _, err := os.Stat(targetPath); err != nil {
+		arg = filepath.Dir(targetPath)
 	}
 
-	cmd := exec.Command("explorer.exe", "/select,", task.SavePath)
+	cmd := exec.Command("explorer.exe", arg)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: 0x08000000,
+	}
 	return cmd.Start()
 }

@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
+
+	"enylvia-downloader/internal/winreg"
 )
 
 type NativeHostManifest struct {
@@ -18,8 +19,8 @@ type NativeHostManifest struct {
 
 const (
 	HostName     = "com.enylvia.downloader"
-	EdgeRegKey   = `HKCU\Software\Microsoft\Edge\NativeMessagingHosts\` + HostName
-	ChromeRegKey = `HKCU\Software\Google\Chrome\NativeMessagingHosts\` + HostName
+	EdgeSubKey   = `Software\Microsoft\Edge\NativeMessagingHosts\` + HostName
+	ChromeSubKey = `Software\Google\Chrome\NativeMessagingHosts\` + HostName
 	ExtensionID  = "leeinjkmocmbogffanjegflpmbfmhogj"
 )
 
@@ -60,32 +61,21 @@ func InstallEdgeHost(appDataDir string) error {
 	batContent := fmt.Sprintf("@echo off\r\n\"%s\" --native-host %%*\r\n", exePath)
 	_ = os.WriteFile(launcherPath, []byte(batContent), 0755)
 
-	// Register in Microsoft Edge NativeMessagingHosts registry
-	cmdEdge := exec.Command("reg", "add", EdgeRegKey, "/ve", "/t", "REG_SZ", "/d", manifestPath, "/f")
-	if output, err := cmdEdge.CombinedOutput(); err != nil {
-		return fmt.Errorf("edge registry registration failed: %s (%w)", string(output), err)
+	// Register in Microsoft Edge & Google Chrome registry natively via Win32 API
+	if err := winreg.SetStringValue(EdgeSubKey, "", manifestPath); err != nil {
+		return fmt.Errorf("edge registry registration failed: %w", err)
 	}
-
-	// Also register in Chrome key for complete Chromium ecosystem coverage
-	cmdChrome := exec.Command("reg", "add", ChromeRegKey, "/ve", "/t", "REG_SZ", "/d", manifestPath, "/f")
-	_ = cmdChrome.Run()
+	_ = winreg.SetStringValue(ChromeSubKey, "", manifestPath)
 
 	return nil
 }
 
 func UninstallEdgeHost() error {
-	cmd1 := exec.Command("reg", "delete", EdgeRegKey, "/f")
-	_ = cmd1.Run()
-	cmd2 := exec.Command("reg", "delete", ChromeRegKey, "/f")
-	_ = cmd2.Run()
+	_ = winreg.DeleteKey(EdgeSubKey)
+	_ = winreg.DeleteKey(ChromeSubKey)
 	return nil
 }
 
 func CheckEdgeHostInstalled() bool {
-	cmdEdge := exec.Command("reg", "query", EdgeRegKey)
-	if cmdEdge.Run() == nil {
-		return true
-	}
-	cmdChrome := exec.Command("reg", "query", ChromeRegKey)
-	return cmdChrome.Run() == nil
+	return winreg.KeyExists(EdgeSubKey) || winreg.KeyExists(ChromeSubKey)
 }

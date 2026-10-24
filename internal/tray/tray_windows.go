@@ -3,11 +3,12 @@ package tray
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"syscall"
 	"unsafe"
+
+	"enylvia-downloader/internal/winreg"
 )
 
 var (
@@ -306,13 +307,12 @@ func StopTray() {
 	}
 }
 
-// Windows Auto-Start Registry Utilities
-const runKey = `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+// Windows Auto-Start Registry Utilities (Native Win32, Zero Window Glitch)
+const runSubKey = `Software\Microsoft\Windows\CurrentVersion\Run`
 const appName = "EnylviaDownloader"
 
 func IsAutoStartEnabled() bool {
-	cmd := exec.Command("reg", "query", runKey, "/v", appName)
-	return cmd.Run() == nil
+	return winreg.ValueExists(runSubKey, appName)
 }
 
 func EnableAutoStart() error {
@@ -326,13 +326,11 @@ func EnableAutoStart() error {
 	}
 
 	val := fmt.Sprintf(`"%s" --minimized`, exePath)
-	cmd := exec.Command("reg", "add", runKey, "/v", appName, "/t", "REG_SZ", "/d", val, "/f")
-	return cmd.Run()
+	return winreg.SetStringValue(runSubKey, appName, val)
 }
 
 func DisableAutoStart() error {
-	cmd := exec.Command("reg", "delete", runKey, "/v", appName, "/f")
-	return cmd.Run()
+	return winreg.DeleteValue(runSubKey, appName)
 }
 
 func ToggleAutoStart() bool {

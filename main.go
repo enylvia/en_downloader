@@ -176,7 +176,9 @@ func main() {
 			}
 		},
 		OnOpenFolder: func() {
-			_ = exec.Command("explorer.exe", cfg.DownloadDir).Start()
+			cmd := exec.Command("explorer.exe", cfg.DownloadDir)
+			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}
+			_ = cmd.Start()
 		},
 		OnExit: func() {
 			dm.Stop()
