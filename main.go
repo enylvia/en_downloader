@@ -129,6 +129,11 @@ func main() {
 	// Automatically ensure Edge/Chrome Native Messaging Host is registered for current exe location
 	_ = nativehost.InstallEdgeHost(cfgMgr.AppDataDir())
 
+	// Automatically ensure Windows Auto-Start is registered if enabled in config
+	if cfg.AutoStart {
+		_ = tray.EnableAutoStart()
+	}
+
 	store := app.NewTaskStore(cfgMgr.AppDataDir())
 	savedTasks, err := store.Load()
 	if err != nil {

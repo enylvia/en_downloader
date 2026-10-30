@@ -357,6 +357,9 @@ func (s *Server) handleSystemStats(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAutoStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		enabled := tray.ToggleAutoStart()
+		cur := s.cfgMgr.Get()
+		cur.AutoStart = enabled
+		_ = s.cfgMgr.Update(cur)
 		jsonResponse(w, http.StatusOK, map[string]bool{"auto_start": enabled})
 		return
 	}
