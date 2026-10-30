@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -171,6 +172,9 @@ func (dm *DownloadManager) RestoreTasks(tasks []*DownloadTask) {
 	for _, t := range tasks {
 		dm.tasks[t.ID] = t
 		dm.taskOrder = append(dm.taskOrder, t.ID)
+		if t.Status == StatusCompleted {
+			go dm.postProcessCompletedFile(t)
+		}
 	}
 }
 
@@ -212,21 +216,192 @@ func parseFilenameFromHeader(header string) string {
 	if header == "" {
 		return ""
 	}
+
+	// 1. First try RFC 5987 / RFC 6266 filename*=UTF-8''encoded_name (highest priority)
+	reExt := regexp.MustCompile(`(?i)filename\*\s*=\s*(?:UTF-8|utf-8)?''([^;\r\n]+)`)
+	if match := reExt.FindStringSubmatch(header); len(match) > 1 {
+		raw := strings.TrimSpace(match[1])
+		raw = strings.Trim(raw, `"'`)
+		if unescaped, err := url.PathUnescape(raw); err == nil && unescaped != "" {
+			return cleanHeaderFilename(unescaped)
+		}
+		if raw != "" {
+			return cleanHeaderFilename(raw)
+		}
+	}
+
+	// 2. Standard Go mime.ParseMediaType
 	_, params, err := mime.ParseMediaType(header)
 	if err == nil {
 		if fn, ok := params["filename*"]; ok {
-			// RFC 5987 / 6266: UTF-8''encoded_name
 			parts := strings.SplitN(fn, "''", 2)
 			if len(parts) == 2 {
-				if unescaped, err := url.PathUnescape(parts[1]); err == nil {
-					return unescaped
+				if unescaped, err := url.PathUnescape(parts[1]); err == nil && unescaped != "" {
+					return cleanHeaderFilename(unescaped)
 				}
 			}
 		}
-		if fn, ok := params["filename"]; ok {
-			return fn
+		if fn, ok := params["filename"]; ok && fn != "" {
+			return cleanHeaderFilename(fn)
 		}
 	}
+
+	// 3. Fallback Regex for quoted: filename="filename.rar"
+	reQuoted := regexp.MustCompile(`(?i)filename\s*=\s*"([^"]+)"`)
+	if match := reQuoted.FindStringSubmatch(header); len(match) > 1 {
+		res := strings.TrimSpace(match[1])
+		if unescaped, err := url.PathUnescape(res); err == nil && unescaped != "" {
+			return cleanHeaderFilename(unescaped)
+		}
+		return cleanHeaderFilename(res)
+	}
+
+	// 4. Fallback Regex for unquoted: filename=filename.rar
+	reUnquoted := regexp.MustCompile(`(?i)filename\s*=\s*([^;\s\r\n]+)`)
+	if match := reUnquoted.FindStringSubmatch(header); len(match) > 1 {
+		res := strings.TrimSpace(match[1])
+		res = strings.Trim(res, `"'`)
+		if unescaped, err := url.PathUnescape(res); err == nil && unescaped != "" {
+			return cleanHeaderFilename(unescaped)
+		}
+		return cleanHeaderFilename(res)
+	}
+
+	return ""
+}
+
+func cleanHeaderFilename(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.Trim(name, `"'`)
+	if idx := strings.LastIndexAny(name, `/\`); idx != -1 {
+		name = name[idx+1:]
+	}
+	return name
+}
+
+func isGenericFilename(name string) bool {
+	if name == "" {
+		return true
+	}
+	base := strings.ToLower(strings.TrimSpace(name))
+	base = strings.TrimSuffix(base, filepath.Ext(base))
+	return base == "download" || base == "file" || base == "get" || base == "index"
+}
+
+func extensionFromContentType(contentType string) string {
+	ct := strings.ToLower(strings.TrimSpace(contentType))
+	if idx := strings.Index(ct, ";"); idx != -1 {
+		ct = strings.TrimSpace(ct[:idx])
+	}
+
+	switch ct {
+	case "application/x-rar-compressed", "application/vnd.rar", "application/x-rar", "application/rar":
+		return ".rar"
+	case "application/zip", "application/x-zip-compressed", "multipart/x-zip":
+		return ".zip"
+	case "application/x-7z-compressed":
+		return ".7z"
+	case "application/x-tar":
+		return ".tar"
+	case "application/gzip", "application/x-gzip":
+		return ".gz"
+	case "application/x-bzip2":
+		return ".bz2"
+	case "application/x-xz":
+		return ".xz"
+	case "application/x-iso9660-image":
+		return ".iso"
+	case "application/pdf":
+		return ".pdf"
+	case "application/vnd.android.package-archive":
+		return ".apk"
+	case "video/mp4":
+		return ".mp4"
+	case "video/x-matroska":
+		return ".mkv"
+	case "video/quicktime":
+		return ".mov"
+	case "video/x-msvideo":
+		return ".avi"
+	case "video/webm":
+		return ".webm"
+	case "audio/mpeg":
+		return ".mp3"
+	case "audio/flac", "audio/x-flac":
+		return ".flac"
+	case "audio/wav", "audio/x-wav":
+		return ".wav"
+	case "audio/aac":
+		return ".aac"
+	case "audio/ogg":
+		return ".ogg"
+	case "application/x-msdownload", "application/x-dosexec":
+		return ".exe"
+	}
+	return ""
+}
+
+func detectExtensionFromMagicBytes(header []byte) string {
+	if len(header) < 2 {
+		return ""
+	}
+	// RAR 5.0: 52 61 72 21 1A 07 01 00
+	if len(header) >= 8 && bytes.Equal(header[:8], []byte{0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00}) {
+		return ".rar"
+	}
+	// RAR 4.x: 52 61 72 21 1A 07 00
+	if len(header) >= 7 && bytes.Equal(header[:7], []byte{0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00}) {
+		return ".rar"
+	}
+	// ZIP: 50 4B 03 04 or 50 4B 05 06 or 50 4B 07 08
+	if bytes.Equal(header[:2], []byte{0x50, 0x4B}) {
+		return ".zip"
+	}
+	// 7Z: 37 7A BC AF 27 1C
+	if len(header) >= 6 && bytes.Equal(header[:6], []byte{0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C}) {
+		return ".7z"
+	}
+	// GZIP: 1F 8B
+	if bytes.Equal(header[:2], []byte{0x1F, 0x8B}) {
+		return ".gz"
+	}
+	// BZIP2: 42 5A 68 ("BZh")
+	if len(header) >= 3 && bytes.Equal(header[:3], []byte{0x42, 0x5A, 0x68}) {
+		return ".bz2"
+	}
+	// XZ: FD 37 7A 58 5A 00
+	if len(header) >= 6 && bytes.Equal(header[:6], []byte{0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00}) {
+		return ".xz"
+	}
+	// PDF: %PDF- (25 50 44 46)
+	if len(header) >= 4 && bytes.Equal(header[:4], []byte{0x25, 0x50, 0x44, 0x46}) {
+		return ".pdf"
+	}
+	// Windows PE Executable: 4D 5A ("MZ")
+	if bytes.Equal(header[:2], []byte{0x4D, 0x5A}) {
+		return ".exe"
+	}
+	// MKV / WebM: 1A 45 DF A3
+	if len(header) >= 4 && bytes.Equal(header[:4], []byte{0x1A, 0x45, 0xDF, 0xA3}) {
+		return ".mkv"
+	}
+	// MP4: ftyp at offset 4
+	if len(header) >= 8 && bytes.Equal(header[4:8], []byte("ftyp")) {
+		return ".mp4"
+	}
+	// PNG: 89 50 4E 47
+	if len(header) >= 4 && bytes.Equal(header[:4], []byte{0x89, 0x50, 0x4E, 0x47}) {
+		return ".png"
+	}
+	// JPEG: FF D8 FF
+	if len(header) >= 3 && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF {
+		return ".jpg"
+	}
+	// MP3: ID3
+	if len(header) >= 3 && bytes.Equal(header[:3], []byte("ID3")) {
+		return ".mp3"
+	}
+
 	return ""
 }
 
@@ -263,20 +438,72 @@ func (dm *DownloadManager) ProbeURL(ctx context.Context, targetURL string, heade
 	}
 	defer resp.Body.Close()
 
-	// Extract filename
+	// 1. Content-Disposition header
 	contentDisposition := resp.Header.Get("Content-Disposition")
 	filename = parseFilenameFromHeader(contentDisposition)
-	if filename == "" {
-		parsed, parseErr := url.Parse(targetURL)
+
+	// 2. Check final URL (after redirects) and query parameters
+	finalURL := targetURL
+	if resp.Request != nil && resp.Request.URL != nil {
+		finalURL = resp.Request.URL.String()
+	}
+
+	if filename == "" || isGenericFilename(filename) {
+		parsed, parseErr := url.Parse(finalURL)
 		if parseErr == nil {
-			pathBase := filepath.Base(parsed.Path)
-			if pathBase != "" && pathBase != "/" && pathBase != "." {
-				unescaped, _ := url.PathUnescape(pathBase)
-				filename = unescaped
+			// A. Check query params for filename (e.g. ?file=something.rar or ?filename=something.rar)
+			q := parsed.Query()
+			for _, key := range []string{"filename", "file", "name", "fn", "title"} {
+				if val := q.Get(key); val != "" && !isGenericFilename(val) && filepath.Ext(val) != "" {
+					if unescaped, err := url.PathUnescape(val); err == nil && unescaped != "" {
+						filename = cleanHeaderFilename(unescaped)
+						break
+					}
+					filename = cleanHeaderFilename(val)
+					break
+				}
+			}
+
+			// B. Check URL path segments
+			if filename == "" || isGenericFilename(filename) {
+				pathBase := filepath.Base(parsed.Path)
+				if pathBase != "" && pathBase != "/" && pathBase != "." && !isGenericFilename(pathBase) {
+					unescaped, _ := url.PathUnescape(pathBase)
+					if unescaped != "" && unescaped != "/" && unescaped != "." {
+						filename = cleanHeaderFilename(unescaped)
+					}
+				}
 			}
 		}
 	}
-	if filename == "" {
+
+	// 3. Fallback to original targetURL if finalURL path had nothing
+	if (filename == "" || isGenericFilename(filename)) && finalURL != targetURL {
+		parsed, parseErr := url.Parse(targetURL)
+		if parseErr == nil {
+			pathBase := filepath.Base(parsed.Path)
+			if pathBase != "" && pathBase != "/" && pathBase != "." && !isGenericFilename(pathBase) {
+				unescaped, _ := url.PathUnescape(pathBase)
+				if unescaped != "" && unescaped != "/" && unescaped != "." {
+					filename = cleanHeaderFilename(unescaped)
+				}
+			}
+		}
+	}
+
+	// 4. Content-Type extension deduction
+	if filename == "" || isGenericFilename(filename) || filepath.Ext(filename) == "" {
+		ctExt := extensionFromContentType(resp.Header.Get("Content-Type"))
+		if ctExt != "" {
+			if filename == "" || isGenericFilename(filename) {
+				filename = "download" + ctExt
+			} else {
+				filename = filename + ctExt
+			}
+		}
+	}
+
+	if filename == "" || isGenericFilename(filename) {
 		filename = "download.bin"
 	}
 	filename = sanitizeFilename(filename)
@@ -348,8 +575,18 @@ func (dm *DownloadManager) AddTask(opts AddTaskOptions) (*DownloadTask, error) {
 	}
 
 	finalFilename := opts.Filename
-	if finalFilename == "" {
+
+	// Check if opts.Filename is generic or missing an extension while probedName has one
+	optsGeneric := isGenericFilename(finalFilename) || filepath.Ext(finalFilename) == ""
+	probedValid := probedName != "" && !isGenericFilename(probedName) && filepath.Ext(probedName) != ""
+
+	if optsGeneric && probedValid {
 		finalFilename = probedName
+	} else if finalFilename == "" {
+		finalFilename = probedName
+	} else if filepath.Ext(finalFilename) == "" && filepath.Ext(probedName) != "" {
+		// e.g. opts.Filename was "MyArchive" without ext, probedName is "MyArchive.rar"
+		finalFilename = finalFilename + filepath.Ext(probedName)
 	}
 	finalFilename = sanitizeFilename(finalFilename)
 
@@ -693,7 +930,12 @@ func (dm *DownloadManager) executeDownload(ctx context.Context, task *DownloadTa
 		task.CompletedAt = &now
 		task.Progress = 100.0
 	}
+	st := task.Status
 	task.Unlock()
+
+	if st == StatusCompleted {
+		dm.postProcessCompletedFile(task)
+	}
 }
 
 func (dm *DownloadManager) executeSingleStreamDownload(ctx context.Context, task *DownloadTask) {
@@ -777,6 +1019,70 @@ func (dm *DownloadManager) executeSingleStreamDownload(ctx context.Context, task
 	task.CompletedAt = &now
 	task.Progress = 100.0
 	task.Unlock()
+
+	dm.postProcessCompletedFile(task)
+}
+
+func (dm *DownloadManager) postProcessCompletedFile(task *DownloadTask) {
+	task.Lock()
+	defer task.Unlock()
+
+	curExt := filepath.Ext(task.SavePath)
+	isGeneric := curExt == "" || strings.EqualFold(curExt, ".bin") || strings.EqualFold(task.Filename, "download")
+
+	if !isGeneric {
+		return
+	}
+
+	// Read first 16 bytes of file on disk
+	f, err := os.Open(task.SavePath)
+	if err != nil {
+		return
+	}
+	buf := make([]byte, 16)
+	n, _ := f.Read(buf)
+	_ = f.Close()
+
+	if n < 2 {
+		return
+	}
+
+	detectedExt := detectExtensionFromMagicBytes(buf[:n])
+	if detectedExt == "" {
+		return
+	}
+
+	oldDir := filepath.Dir(task.SavePath)
+	oldName := filepath.Base(task.SavePath)
+	newName := oldName
+	if curExt != "" {
+		newName = strings.TrimSuffix(oldName, curExt) + detectedExt
+	} else {
+		newName = oldName + detectedExt
+	}
+
+	newCategory := DetermineCategory(newName)
+
+	targetDir := oldDir
+	if dm.autoCategorize && (task.Category == CatGeneral || task.Category == "") && newCategory != CatGeneral {
+		baseDir := dm.defaultDir
+		targetDir = filepath.Join(baseDir, string(newCategory))
+		_ = os.MkdirAll(targetDir, 0755)
+	}
+
+	newPath := getUniqueFilePath(targetDir, newName)
+	if err := os.Rename(task.SavePath, newPath); err == nil {
+		task.SavePath = newPath
+		task.Filename = filepath.Base(newPath)
+		task.Category = newCategory
+
+		if dm.saveCallback != nil {
+			dm.saveCallback(dm.GetTasks())
+		}
+		if dm.eventBroadcast != nil {
+			dm.eventBroadcast("task_updated", task)
+		}
+	}
 }
 
 func (dm *DownloadManager) updateSpeeds(now time.Time) {

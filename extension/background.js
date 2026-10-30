@@ -67,6 +67,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }
 });
 
+function isGenericName(n) {
+  if (!n) return true;
+  const lower = n.toLowerCase().trim();
+  const base = lower.includes(".") ? lower.substring(0, lower.lastIndexOf(".")) : lower;
+  return base === "download" || base === "download.bin" || base === "file" || base === "index" || base === "get";
+}
+
 function extractFilename(item, url) {
   let name = (item && item.filename) ? item.filename : "";
   if (name.includes("\\")) {
@@ -75,16 +82,33 @@ function extractFilename(item, url) {
     name = name.substring(name.lastIndexOf("/") + 1);
   }
 
-  if (!name || name === "download") {
-    try {
-      const u = new URL(url);
-      const parts = u.pathname.split("/").filter(Boolean);
-      if (parts.length > 0) {
-        name = decodeURIComponent(parts[parts.length - 1]);
-      }
-    } catch (e) {}
+  // If valid filename with actual extension, return it
+  if (name && !isGenericName(name) && name.includes(".")) {
+    return name;
   }
-  return name;
+
+  // Try extracting from URL query params or path segments
+  try {
+    const u = new URL(url);
+    // 1. Check common query parameters (e.g. ?file=archive.rar or ?filename=archive.rar)
+    for (const p of ["filename", "file", "name", "fn", "title"]) {
+      const val = u.searchParams.get(p);
+      if (val && !isGenericName(val) && val.includes(".")) {
+        return decodeURIComponent(val);
+      }
+    }
+    // 2. Check path segments from right to left
+    const parts = u.pathname.split("/").filter(Boolean);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const seg = decodeURIComponent(parts[i]);
+      if (seg && !isGenericName(seg) && seg.includes(".")) {
+        return seg;
+      }
+    }
+  } catch (e) {}
+
+  // If name has no extension or is generic, return empty string so backend ProbeURL resolves the true filename from Content-Disposition
+  return "";
 }
 
 function closeTabIfBlankDownload(url) {
@@ -100,7 +124,7 @@ function closeTabIfBlankDownload(url) {
   } catch (e) {}
 }
 
-// 1. Primary Interceptor: onCreated
+// 1. Early Interceptor: onCreated (Only if filename is already known with a valid extension)
 chrome.downloads.onCreated.addListener((item) => {
   if (!interceptEnabled) return;
 
@@ -110,6 +134,12 @@ chrome.downloads.onCreated.addListener((item) => {
 
   const url = item.finalUrl || item.url;
   if (!url || url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("chrome:") || url.startsWith("edge:") || url.startsWith("file:")) {
+    return;
+  }
+
+  const filename = extractFilename(item, url);
+  // If filename is not known yet (server headers haven't arrived), wait for onDeterminingFilename!
+  if (!filename) {
     return;
   }
 
@@ -124,17 +154,16 @@ chrome.downloads.onCreated.addListener((item) => {
     recentlyIntercepted.delete(url);
   }, 1500);
 
-  // Cancel Edge download immediately and close any popup/blank tab opened for this download
+  // Cancel Edge/Chrome download immediately and close any popup/blank tab opened for this download
   chrome.downloads.cancel(item.id, () => {
     chrome.downloads.erase({ id: item.id }, () => {});
   });
   closeTabIfBlankDownload(url);
 
-  const filename = extractFilename(item, url);
   sendDownloadToEnylvia(url, filename, item.referrer || "");
 });
 
-// 2. Secondary Interceptor: onDeterminingFilename
+// 2. Header-Aware Interceptor: onDeterminingFilename (Fired after server Content-Disposition is received)
 chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
   if (!interceptEnabled) {
     suggest();

@@ -272,3 +272,96 @@ func TestRateLimiterThrottling(t *testing.T) {
 		t.Fatalf("Rate limiter did not unthrottle immediately: elapsed %v", elapsed)
 	}
 }
+
+func TestParseFilenameFromHeader(t *testing.T) {
+	tests := []struct {
+		header   string
+		expected string
+	}{
+		{`attachment; filename="archive.rar"`, "archive.rar"},
+		{`attachment; filename=archive.rar`, "archive.rar"},
+		{`attachment; filename*=UTF-8''my%20archive.rar`, "my archive.rar"},
+		{`attachment; filename*=utf-8''my%20archive.rar; filename="fallback.rar"`, "my archive.rar"},
+		{`attachment; filename="data.rar"; size=500000`, "data.rar"},
+		{`inline; filename="document.pdf"`, "document.pdf"},
+		{`attachment; filename="C:\\fakepath\\photo.jpg"`, "photo.jpg"},
+		{`attachment; filename="/var/www/uploads/movie.mp4"`, "movie.mp4"},
+	}
+
+	for _, tc := range tests {
+		got := parseFilenameFromHeader(tc.header)
+		if got != tc.expected {
+			t.Errorf("parseFilenameFromHeader(%q) = %q; want %q", tc.header, got, tc.expected)
+		}
+	}
+}
+
+func TestDetectExtensionFromMagicBytes(t *testing.T) {
+	// RAR 5.0
+	rar5Header := []byte{0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00}
+	if ext := detectExtensionFromMagicBytes(rar5Header); ext != ".rar" {
+		t.Errorf("detectExtensionFromMagicBytes(RAR5) = %s; want .rar", ext)
+	}
+
+	// RAR 4.x
+	rar4Header := []byte{0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00}
+	if ext := detectExtensionFromMagicBytes(rar4Header); ext != ".rar" {
+		t.Errorf("detectExtensionFromMagicBytes(RAR4) = %s; want .rar", ext)
+	}
+
+	// ZIP
+	zipHeader := []byte{0x50, 0x4B, 0x03, 0x04}
+	if ext := detectExtensionFromMagicBytes(zipHeader); ext != ".zip" {
+		t.Errorf("detectExtensionFromMagicBytes(ZIP) = %s; want .zip", ext)
+	}
+
+	// 7Z
+	sevenZHeader := []byte{0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C}
+	if ext := detectExtensionFromMagicBytes(sevenZHeader); ext != ".7z" {
+		t.Errorf("detectExtensionFromMagicBytes(7Z) = %s; want .7z", ext)
+	}
+}
+
+func TestPostProcessCompletedFile(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "enylvia_postprocess_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create a dummy completed file with generic name 'download' containing RAR5 magic bytes
+	filePath := filepath.Join(tempDir, "download")
+	rar5Content := []byte{0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00, 0x00, 0x11, 0x22, 0x33}
+	if err := os.WriteFile(filePath, rar5Content, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	dm := NewDownloadManager(tempDir, 2, 4, 0, true)
+
+	task := &DownloadTask{
+		ID:         "test_task",
+		Filename:   "download",
+		SavePath:   filePath,
+		Category:   CatGeneral,
+		Status:     StatusCompleted,
+		TotalSize:  int64(len(rar5Content)),
+		Downloaded: int64(len(rar5Content)),
+	}
+
+	dm.postProcessCompletedFile(task)
+
+	// The file should have been renamed to download.rar and moved to Compressed subfolder
+	expectedPath := filepath.Join(tempDir, "Compressed", "download.rar")
+	if task.SavePath != expectedPath {
+		t.Errorf("Expected SavePath %s, got %s", expectedPath, task.SavePath)
+	}
+	if task.Filename != "download.rar" {
+		t.Errorf("Expected Filename download.rar, got %s", task.Filename)
+	}
+	if task.Category != CatCompressed {
+		t.Errorf("Expected Category Compressed, got %s", task.Category)
+	}
+	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
+		t.Errorf("Renamed file does not exist at %s", expectedPath)
+	}
+}
