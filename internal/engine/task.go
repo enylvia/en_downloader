@@ -74,15 +74,15 @@ type DownloadTask struct {
 func DetermineCategory(filename string) Category {
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
-	case ".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz", ".iso", ".tgz":
+	case ".zip", ".rar", ".7z", ".7zip", ".tar", ".gz", ".bz2", ".xz", ".zst", ".iso", ".tgz", ".bin", ".img", ".cue", ".cab", ".vhd", ".vhdx", ".jar", ".war":
 		return CatCompressed
-	case ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".ts":
+	case ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".ts", ".3gp", ".mpg", ".mpeg", ".m2ts", ".vob", ".ogv":
 		return CatVideo
-	case ".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma", ".m4a":
+	case ".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma", ".m4a", ".opus", ".alac", ".aiff", ".mid", ".midi":
 		return CatMusic
-	case ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv", ".rtf", ".epub":
+	case ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv", ".rtf", ".epub", ".mobi", ".odt", ".ods", ".odp", ".tsv", ".md", ".json", ".xml", ".log", ".yaml", ".yml":
 		return CatDocument
-	case ".exe", ".msi", ".bat", ".cmd", ".apk", ".dmg", ".appimage", ".sh":
+	case ".exe", ".msi", ".bat", ".cmd", ".apk", ".dmg", ".appimage", ".sh", ".ps1", ".vbs", ".reg":
 		return CatPrograms
 	default:
 		return CatGeneral

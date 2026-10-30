@@ -27,48 +27,65 @@ Aplikasi **Desktop Download Manager** mandiri berperforma tinggi berbasis **Go (
 
 ---
 
-## 🚀 Cara Menjalankan
+## 🚀 Panduan Cepat (Untuk Pengguna Baru / Setelah Clone)
 
-### 1. Menjalankan Biasa (Membuka Jendela Desktop):
-```powershell
-.\EnylviaDownloader.exe
-```
-Jendela aplikasi desktop mandiri akan langsung muncul di layar Anda.
+Hanya perlu **2 langkah mudah** agar aplikasi dan integrasi browser langsung berjalan 100%:
 
-### 2. Menjalankan Langsung Minimize ke System Tray:
-```powershell
-.\EnylviaDownloader.exe --minimized
+### Langkah 1: Jalankan Aplikasi
+Cukup klik ganda (double-click) file:
 ```
-atau
-```powershell
-.\EnylviaDownloader.exe --tray
+EnylviaDownloader.exe
 ```
-Aplikasi akan langsung masuk ke System Tray di pojok kanan bawah tanpa membuka jendela.
-
-### 3. Mengatur Auto-Start Windows Startup:
-* **Aktifkan:**
-  ```powershell
-  .\EnylviaDownloader.exe -install-autostart
-  ```
-* **Nonaktifkan:**
-  ```powershell
-  .\EnylviaDownloader.exe -uninstall-autostart
-  ```
-*(Atau dapat diaktifkan/dinonaktifkan langsung lewat menu klik kanan ikon System Tray atau Pengaturan Aplikasi).*
-
-### 4. Mendaftarkan Integrasi Microsoft Edge:
-```powershell
-.\EnylviaDownloader.exe -install-edge
-```
+* Jendela desktop cyberpunk EnylviaDownloader akan langsung terbuka.
+* Secara otomatis, aplikasi akan mendaftarkan *Native Messaging Host* ke registry Windows Anda secara senyap (tanpa perlu membuka CMD/Terminal).
+* Aplikasi juga otomatis aktif di System Tray (dekat jam Windows).
 
 ---
 
-## 🌐 Cara Memasang Ekstensi di Microsoft Edge:
-1. Buka browser **Microsoft Edge** dan buka: `edge://extensions`
-2. Aktifkan **Mode Pengembang (*Developer mode*)** di panel kiri bawah.
-3. Klik tombol **Load unpacked** (Muat ekstensi yang belum dibongkar).
-4. Pilih folder:
+### Langkah 2: Pasang Ekstensi di Microsoft Edge
+1. Buka browser **Microsoft Edge**, lalu ketik di address bar: `edge://extensions`
+2. Aktifkan sakelar **Mode Pengembang (*Developer mode*)** di panel kiri bawah.
+3. Klik tombol **Muat ekstensi yang belum dibongkar (*Load unpacked*)**.
+4. Pilih folder `extension` yang ada di dalam repositori hasil clone Anda:
    ```
-   D:\Project  Adit\EnylviaDownloader\extension
+   <folder-clone-anda>\extension
    ```
-5. Ekstensi EnylviaDownloader kini aktif di Microsoft Edge Anda!
+5. **Selesai!** Ekstensi akan otomatis terhubung ke EnylviaDownloader (indikator di dashboard akan berubah menjadi hijau *"Live (Edge)"*). Setiap unduhan di Edge kini otomatis ditangkap oleh EnylviaDownloader.
+
+---
+
+## 🛠️ Build dari Source (Untuk Developer / Pengguna Go)
+
+Jika Anda ingin mengompilasi ulang kode sumber Go sendiri:
+
+### Cara Praktis:
+Jalankan file batch otomatis:
+```cmd
+build.bat
+```
+
+### Cara Manual via Terminal:
+```powershell
+go build -ldflags="-H=windowsgui -s -w" -o EnylviaDownloader.exe .
+```
+> **Catatan Penting:** Flag `-H=windowsgui` wajib disertakan agar aplikasi berjalan murni sebagai aplikasi GUI Windows tanpa memunculkan jendela console/terminal hitam saat dijalankan.
+
+---
+
+## ⚙️ Opsi Perintah Tambahan (CLI)
+
+Aplikasi juga mendukung flag opsional jika dijalankan via terminal:
+
+* **Mulai langsung di System Tray (Minimize):**
+  ```powershell
+  .\EnylviaDownloader.exe --minimized
+  ```
+* **Aktifkan Auto-Start saat Windows Booting:**
+  ```powershell
+  .\EnylviaDownloader.exe -install-autostart
+  ```
+* **Nonaktifkan Auto-Start:**
+  ```powershell
+  .\EnylviaDownloader.exe -uninstall-autostart
+  ```
+*(Pengaturan ini juga dapat diubah kapan saja langsung lewat menu klik kanan ikon System Tray atau Pengaturan di dalam aplikasi).*

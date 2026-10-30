@@ -104,6 +104,10 @@ function closeTabIfBlankDownload(url) {
 chrome.downloads.onCreated.addListener((item) => {
   if (!interceptEnabled) return;
 
+  // Ignore completed, interrupted, or stale downloads from previous browser sessions
+  if (item.state && item.state !== "in_progress") return;
+  if (item.startTime && (Date.now() - new Date(item.startTime).getTime() > 15000)) return;
+
   const url = item.finalUrl || item.url;
   if (!url || url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("chrome:") || url.startsWith("edge:") || url.startsWith("file:")) {
     return;
@@ -133,6 +137,16 @@ chrome.downloads.onCreated.addListener((item) => {
 // 2. Secondary Interceptor: onDeterminingFilename
 chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
   if (!interceptEnabled) {
+    suggest();
+    return;
+  }
+
+  // Ignore completed, interrupted, or stale downloads from previous browser sessions
+  if (item.state && item.state !== "in_progress") {
+    suggest();
+    return;
+  }
+  if (item.startTime && (Date.now() - new Date(item.startTime).getTime() > 15000)) {
     suggest();
     return;
   }
@@ -211,14 +225,13 @@ async function sendDownloadToEnylvia(url, filename, referrer) {
   try {
     chrome.runtime.sendNativeMessage(NATIVE_HOST, payload, (response) => {
       if (chrome.runtime.lastError || !response || response.status !== "ok") {
-        console.warn("Native message error:", chrome.runtime.lastError);
-        showNotification("EnylviaDownloader", "Buka aplikasi EnylviaDownloader untuk memulai download.");
+        console.warn("Native message error:", chrome.runtime.lastError || response);
       } else {
         showNotification("EnylviaDownloader", `Mengunduh: ${filename || url}`);
       }
     });
   } catch (e) {
-    showNotification("EnylviaDownloader", "Gagal menghubungi EnylviaDownloader.");
+    console.warn("Native messaging failed:", e);
   }
 }
 

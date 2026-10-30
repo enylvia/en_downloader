@@ -71,10 +71,18 @@ func TestDetermineCategory(t *testing.T) {
 		expected Category
 	}{
 		{"archive.zip", CatCompressed},
+		{"disk.bin", CatCompressed},
+		{"image.iso", CatCompressed},
 		{"movie.mkv", CatVideo},
+		{"clip.mp4", CatVideo},
 		{"song.mp3", CatMusic},
+		{"track.flac", CatMusic},
 		{"document.pdf", CatDocument},
+		{"notes.md", CatDocument},
+		{"config.json", CatDocument},
 		{"installer.exe", CatPrograms},
+		{"setup.msi", CatPrograms},
+		{"app.apk", CatPrograms},
 		{"random.unknown", CatGeneral},
 	}
 
@@ -83,6 +91,73 @@ func TestDetermineCategory(t *testing.T) {
 		if got != tc.expected {
 			t.Errorf("DetermineCategory(%s) = %v; want %v", tc.filename, got, tc.expected)
 		}
+	}
+}
+
+func TestAutoCategorizeSubfolders(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "enylvia_cat_test_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	client := &http.Client{
+		Transport: &memoryTransport{payload: []byte("test")},
+	}
+
+	// 1. With autoCategorize = true
+	dm := NewDownloadManager(tempDir, 2, 4, 0, true)
+	dm.client = client
+
+	taskBin, err := dm.AddTask(AddTaskOptions{
+		URL:      "http://virtual-test.local/archive.bin",
+		Filename: "archive.bin",
+	})
+	if err != nil {
+		t.Fatalf("AddTask failed: %v", err)
+	}
+	expectedBinDir := filepath.Join(tempDir, "Compressed")
+	if filepath.Dir(taskBin.SavePath) != expectedBinDir {
+		t.Errorf("Expected save dir %s, got %s", expectedBinDir, filepath.Dir(taskBin.SavePath))
+	}
+
+	taskDoc, err := dm.AddTask(AddTaskOptions{
+		URL:      "http://virtual-test.local/manual.pdf",
+		Filename: "manual.pdf",
+	})
+	if err != nil {
+		t.Fatalf("AddTask failed: %v", err)
+	}
+	expectedDocDir := filepath.Join(tempDir, "Documents")
+	if filepath.Dir(taskDoc.SavePath) != expectedDocDir {
+		t.Errorf("Expected save dir %s, got %s", expectedDocDir, filepath.Dir(taskDoc.SavePath))
+	}
+
+	taskGen, err := dm.AddTask(AddTaskOptions{
+		URL:      "http://virtual-test.local/unknown.xyz",
+		Filename: "unknown.xyz",
+	})
+	if err != nil {
+		t.Fatalf("AddTask failed: %v", err)
+	}
+	expectedGenDir := filepath.Join(tempDir, "General")
+	if filepath.Dir(taskGen.SavePath) != expectedGenDir {
+		t.Errorf("Expected save dir %s, got %s", expectedGenDir, filepath.Dir(taskGen.SavePath))
+	}
+
+	// 2. With autoCategorize = false
+	dmDisabled := NewDownloadManager(tempDir, 2, 4, 0, false)
+	dmDisabled.client = client
+
+	taskNoCat, err := dmDisabled.AddTask(AddTaskOptions{
+		URL:      "http://virtual-test.local/plain.zip",
+		Filename: "plain.zip",
+	})
+	if err != nil {
+		t.Fatalf("AddTask failed: %v", err)
+	}
+	if filepath.Dir(taskNoCat.SavePath) != tempDir {
+		t.Errorf("Expected save dir %s, got %s", tempDir, filepath.Dir(taskNoCat.SavePath))
 	}
 }
 

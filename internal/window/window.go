@@ -129,7 +129,6 @@ func (wm *WindowManager) OpenWindow() error {
 		// Aggressive RAM & Process Optimization (Down from ~950MB to ~150MB)
 		"--renderer-process-limit=1",
 		"--enable-low-end-device-mode",
-		"--disable-site-isolation-trials",
 		"--disable-background-networking",
 		"--disable-component-update",
 		"--disable-extensions",

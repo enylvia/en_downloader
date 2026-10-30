@@ -359,9 +359,9 @@ func (dm *DownloadManager) AddTask(opts AddTaskOptions) (*DownloadTask, error) {
 	}
 
 	saveDir := opts.SavePath
-	if saveDir == "" {
+	if saveDir == "" || filepath.Clean(saveDir) == filepath.Clean(dm.defaultDir) {
 		saveDir = dm.defaultDir
-		if dm.autoCategorize && category != CatGeneral {
+		if dm.autoCategorize {
 			saveDir = filepath.Join(saveDir, string(category))
 		}
 	}

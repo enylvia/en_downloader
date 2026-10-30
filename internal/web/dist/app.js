@@ -804,7 +804,7 @@ document.getElementById('btn-submit-download').addEventListener('click', async (
   }
 });
 
-// Settings Modal & Edge Integration
+// Settings Modal
 document.getElementById('btn-open-settings').addEventListener('click', async () => {
   try {
     const res = await fetch('/api/config');
@@ -812,13 +812,12 @@ document.getElementById('btn-open-settings').addEventListener('click', async () 
     document.getElementById('cfg-download-dir').value = cfg.download_dir || '';
     document.getElementById('cfg-max-concurrent').value = cfg.max_concurrent_tasks || 3;
     document.getElementById('cfg-default-conns').value = cfg.default_connections || 8;
-    document.getElementById('cfg-auto-categorize').checked = cfg.auto_categorize;
+    document.getElementById('cfg-auto-categorize').checked = cfg.auto_categorize !== false;
 
     const autoRes = await fetch('/api/system/autostart');
     const autoData = await autoRes.json();
     document.getElementById('cfg-autostart-toggle').checked = autoData.auto_start;
 
-    await checkEdgeStatus();
     document.getElementById('modal-settings').classList.add('open');
   } catch (e) {}
 });
@@ -827,34 +826,22 @@ async function checkEdgeStatus() {
   try {
     const edgeRes = await fetch('/api/edge/status');
     const edgeData = await edgeRes.json();
-    const text = document.getElementById('edge-status-text');
-    const modalDot = document.getElementById('edge-modal-dot');
-    const btn = document.getElementById('btn-install-edge');
     const sideDot = document.getElementById('sidebar-hook-dot');
     const sideBadge = document.getElementById('sidebar-hook-badge');
 
     if (edgeData.live) {
-      if (text) text.innerText = 'Tersambung (Service Worker Edge Aktif)';
-      if (modalDot) modalDot.className = 'status-dot live';
-      if (btn) btn.innerText = 'Daftarkan Ulang';
       if (sideDot) sideDot.className = 'hook-dot live';
       if (sideBadge) {
         sideBadge.className = 'hook-badge live';
         sideBadge.innerText = 'Live (Edge)';
       }
     } else if (edgeData.installed) {
-      if (text) text.innerText = 'Host Terdaftar (Menunggu request dari Edge)';
-      if (modalDot) modalDot.className = 'status-dot ready';
-      if (btn) btn.innerText = 'Daftarkan Ulang';
       if (sideDot) sideDot.className = 'hook-dot ready';
       if (sideBadge) {
         sideBadge.className = 'hook-badge ready';
         sideBadge.innerText = 'Host Siap';
       }
     } else {
-      if (text) text.innerText = 'Belum terdaftar di Microsoft Edge';
-      if (modalDot) modalDot.className = 'status-dot offline';
-      if (btn) btn.innerText = 'Daftarkan ke Microsoft Edge';
       if (sideDot) sideDot.className = 'hook-dot offline';
       if (sideBadge) {
         sideBadge.className = 'hook-badge offline';
@@ -862,73 +849,6 @@ async function checkEdgeStatus() {
       }
     }
   } catch (e) {}
-}
-
-// Click listener for Sidebar Hook status
-const sidebarHookBtn = document.getElementById('sidebar-hook-btn');
-if (sidebarHookBtn) {
-  sidebarHookBtn.addEventListener('click', () => {
-    document.getElementById('btn-open-settings').click();
-  });
-}
-
-// Handler for Daftarkan Ulang (btn-install-edge)
-const btnInstallEdge = document.getElementById('btn-install-edge');
-if (btnInstallEdge) {
-  btnInstallEdge.addEventListener('click', async (e) => {
-    e.preventDefault();
-    btnInstallEdge.disabled = true;
-    btnInstallEdge.innerText = 'Mendaftarkan...';
-
-    try {
-      const res = await fetch('/api/edge/install', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        showToast('Berhasil didaftarkan ke Registry Windows!');
-        await checkEdgeStatus();
-      } else {
-        showToast('Gagal: ' + (data.error || 'Terjadi kesalahan'));
-      }
-    } catch (err) {
-      showToast('Error: ' + err.message);
-    } finally {
-      btnInstallEdge.disabled = false;
-    }
-  });
-}
-
-// Handler for Test Download (btn-test-edge)
-const btnTestEdge = document.getElementById('btn-test-edge');
-if (btnTestEdge) {
-  btnTestEdge.addEventListener('click', async (e) => {
-    e.preventDefault();
-    btnTestEdge.disabled = true;
-    btnTestEdge.innerText = 'Menguji...';
-
-    try {
-      const res = await fetch('/api/tasks/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: 'https://raw.githubusercontent.com/curl/curl/master/README.md',
-          filename: 'Enylvia_BrowserHook_Test.md',
-          auto_start: true
-        })
-      });
-      const data = await res.json();
-      if (data.task) {
-        showToast('✓ Tes Berhasil! Task download langsung aktif.');
-        document.getElementById('modal-settings').classList.remove('open');
-      } else {
-        showToast('Uji gagal: ' + (data.error || 'Terjadi kesalahan'));
-      }
-    } catch (err) {
-      showToast('Error pengujian: ' + err.message);
-    } finally {
-      btnTestEdge.disabled = false;
-      btnTestEdge.innerText = 'Uji Unduhan Langsung';
-    }
-  });
 }
 
 document.getElementById('btn-save-settings').addEventListener('click', async () => {

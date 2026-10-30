@@ -1,0 +1,16 @@
+# Executable backup & temporary files
+*.exe~
+*.tmp
+*.log
+app.log
+
+# Local app data & fallback downloads
+data/
+edge_profile/
+
+# OS & Editor generated files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

@@ -126,6 +126,9 @@ func main() {
 	}
 
 	// 4. Initialize Core Engine & Store
+	// Automatically ensure Edge/Chrome Native Messaging Host is registered for current exe location
+	_ = nativehost.InstallEdgeHost(cfgMgr.AppDataDir())
+
 	store := app.NewTaskStore(cfgMgr.AppDataDir())
 	savedTasks, err := store.Load()
 	if err != nil {
@@ -215,8 +218,9 @@ func main() {
 		tray.ShowBalloonNotification("EnylviaDownloader", "Mesin aktif di background (System Tray). Siap mengunduh.")
 	}
 
-	// Start HTTP server in background
+	log.Printf("[INFO] Server starting on port %d...", port)
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server error: %v", err)
 	}
+	log.Printf("[INFO] Server stopped gracefully.")
 }

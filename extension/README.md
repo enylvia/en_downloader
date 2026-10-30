@@ -14,9 +14,6 @@ Ekstensi ini mengintegrasikan browser Microsoft Edge dengan aplikasi desktop **E
    - Klik ikon **Muat Ulang / Reload (panah melingkar)** pada kartu ekstensi EnylviaDownloader, atau klik **Hapus (Remove)** lalu pasang ulang.
 5. Jika memasang baru:
    - Klik tombol **Muat ekstensi yang belum dibongkar (Load unpacked)** di bagian atas.
-   - Arahkan ke folder:
-     ```
-     D:\Project  Adit\EnylviaDownloader\extension
-     ```
+   - Arahkan ke folder `extension` di dalam folder project EnylviaDownloader hasil clone Anda.
 6. Pastikan status ekstensi menyala (Aktif).
 7. Sekarang, setiap kali Anda mengunduh file apa pun di Microsoft Edge atau klik kanan tautan > "Download with EnylviaDownloader", unduhan akan langsung masuk ke aplikasi EnylviaDownloader dan jendela aplikasi akan langsung terbuka menampilkan proses pengunduhan secara *real-time*.
