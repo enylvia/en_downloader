@@ -2,6 +2,8 @@ package engine
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -363,5 +365,164 @@ func TestPostProcessCompletedFile(t *testing.T) {
 	}
 	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
 		t.Errorf("Renamed file does not exist at %s", expectedPath)
+	}
+}
+
+// fakeProtonTransport simulates servers that return Accept-Ranges: bytes in HEAD,
+// but return 200 OK and the entire file when Range is requested.
+type fakeProtonTransport struct {
+	payload []byte
+}
+
+func (f *fakeProtonTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp := &http.Response{
+		Header:     make(http.Header),
+		Request:    req,
+		Proto:      "HTTP/1.1",
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+	}
+
+	resp.Header.Set("Accept-Ranges", "bytes")
+	resp.Header.Set("Content-Type", "application/octet-stream")
+	resp.Header.Set("Content-Disposition", `attachment; filename="ProtonApp.exe"`)
+	resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(f.payload)))
+
+	// Server always returns 200 OK, completely ignoring Range!
+	resp.StatusCode = http.StatusOK
+	resp.Status = "200 OK"
+	resp.Body = io.NopCloser(bytes.NewReader(f.payload))
+	return resp, nil
+}
+
+func TestProbeURLRejectsFakeAcceptRanges(t *testing.T) {
+	payload := []byte("ProtonFakeExecutableDataThatMustNotBeDuplicated")
+	transport := &fakeProtonTransport{payload: payload}
+	client := &http.Client{Transport: transport}
+
+	tempDir, err := os.MkdirTemp("", "enylvia_probe_test_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	dm := NewDownloadManager(tempDir, 1, 4, 0, false)
+	dm.client = client
+
+	filename, size, supportsRange, err := dm.ProbeURL(context.Background(), "https://example.com/ProtonApp.exe", nil)
+	if err != nil {
+		t.Fatalf("ProbeURL failed: %v", err)
+	}
+
+	if filename != "ProtonApp.exe" {
+		t.Errorf("Expected filename ProtonApp.exe, got %s", filename)
+	}
+	if size != int64(len(payload)) {
+		t.Errorf("Expected size %d, got %d", len(payload), size)
+	}
+	if supportsRange {
+		t.Errorf("supportsRange should be false when server returns 200 OK for Range request, got true")
+	}
+}
+
+func TestChunkWorkerReturnsErrRangeNotSupportedOn200OK(t *testing.T) {
+	payload := []byte("12345678901234567890")
+	transport := &fakeProtonTransport{payload: payload}
+	client := &http.Client{Transport: transport}
+
+	tempDir, err := os.MkdirTemp("", "enylvia_worker_test_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	filePath := filepath.Join(tempDir, "test.bin")
+	file, err := os.Create(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	task := &DownloadTask{
+		ID:             "chunk_test",
+		URL:            "https://example.com/test.bin",
+		TotalSize:      int64(len(payload)),
+		NumConnections: 2,
+		SupportsRange:  true,
+		OutFile:        file,
+		Chunks: []Chunk{
+			{Index: 0, Start: 0, End: 9, Total: 10, Status: "pending"},
+			{Index: 1, Start: 10, End: 19, Total: 10, Status: "pending"},
+		},
+	}
+
+	worker1 := NewChunkWorker(client, task, 1, nil)
+	err = worker1.Download(context.Background())
+	if err == nil {
+		t.Fatalf("Expected worker 1 to fail with ErrRangeNotSupported, got nil")
+	}
+	if !errors.Is(err, ErrRangeNotSupported) {
+		t.Errorf("Expected ErrRangeNotSupported, got %v", err)
+	}
+}
+
+func TestAutoFallbackToSingleStreamWhenServerRefusesRange(t *testing.T) {
+	payload := []byte("ProtonInstallerValidPayloadExactBytes123456")
+	transport := &fakeProtonTransport{payload: payload}
+	client := &http.Client{Transport: transport}
+
+	tempDir, err := os.MkdirTemp("", "enylvia_fallback_test_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	dm := NewDownloadManager(tempDir, 1, 4, 0, false)
+	dm.client = client
+
+	// Manually add task configured with 4 chunks as if ProbeURL thought it supported range
+	filePath := filepath.Join(tempDir, "fallback_test.bin")
+	task := &DownloadTask{
+		ID:             "fallback_task",
+		URL:            "https://example.com/fallback_test.bin",
+		Filename:       "fallback_test.bin",
+		SavePath:       filePath,
+		Category:       CatGeneral,
+		TotalSize:      int64(len(payload)),
+		NumConnections: 4,
+		SupportsRange:  true,
+		Status:         StatusDownloading,
+		Chunks: []Chunk{
+			{Index: 0, Start: 0, End: 10, Total: 11, Status: "pending"},
+			{Index: 1, Start: 11, End: 21, Total: 11, Status: "pending"},
+			{Index: 2, Start: 22, End: 32, Total: 11, Status: "pending"},
+			{Index: 3, Start: 33, End: int64(len(payload) - 1), Total: int64(len(payload)) - 33, Status: "pending"},
+		},
+	}
+
+	dm.mu.Lock()
+	dm.tasks[task.ID] = task
+	dm.taskOrder = []string{task.ID}
+	dm.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	dm.executeDownload(ctx, task)
+
+	if task.Status != StatusCompleted {
+		t.Fatalf("Expected task status %s, got %s (err: %s)", StatusCompleted, task.Status, task.ErrorMessage)
+	}
+
+	if task.Downloaded != int64(len(payload)) {
+		t.Errorf("Expected downloaded bytes %d, got %d", len(payload), task.Downloaded)
+	}
+
+	savedBytes, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("Failed to read saved file: %v", err)
+	}
+	if !bytes.Equal(savedBytes, payload) {
+		t.Errorf("Saved content mismatch: got %q, want %q", string(savedBytes), string(payload))
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -170,6 +171,9 @@ func (dm *DownloadManager) RestoreTasks(tasks []*DownloadTask) {
 	defer dm.mu.Unlock()
 
 	for _, t := range tasks {
+		if t.TotalSize > 0 && t.Downloaded > t.TotalSize {
+			t.Downloaded = t.TotalSize
+		}
 		dm.tasks[t.ID] = t
 		dm.taskOrder = append(dm.taskOrder, t.ID)
 		if t.Status == StatusCompleted {
@@ -511,8 +515,26 @@ func (dm *DownloadManager) ProbeURL(ctx context.Context, targetURL string, heade
 	// Check Range support
 	acceptRanges := resp.Header.Get("Accept-Ranges")
 	contentRange := resp.Header.Get("Content-Range")
-	if strings.EqualFold(acceptRanges, "bytes") || contentRange != "" || resp.StatusCode == http.StatusPartialContent {
+	if contentRange != "" || resp.StatusCode == http.StatusPartialContent {
 		supportsRange = true
+	} else if strings.EqualFold(acceptRanges, "bytes") {
+		// Server claims accept-ranges: bytes in HEAD, but many CDNs/proxies ignore Range.
+		// Verify with a 1-byte GET request: Range: bytes=0-0
+		testReq, testErr := http.NewRequestWithContext(ctx, "GET", finalURL, nil)
+		if testErr == nil {
+			testReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0")
+			testReq.Header.Set("Range", "bytes=0-0")
+			for k, v := range headers {
+				testReq.Header.Set(k, v)
+			}
+			testResp, testErr := dm.client.Do(testReq)
+			if testErr == nil {
+				if testResp.StatusCode == http.StatusPartialContent {
+					supportsRange = true
+				}
+				_ = testResp.Body.Close()
+			}
+		}
 	}
 
 	// Extract total size
@@ -914,21 +936,67 @@ func (dm *DownloadManager) executeDownload(ctx context.Context, task *DownloadTa
 
 	// Check if any chunk failed
 	var downloadErr error
+	var rangeNotSupported bool
 	for e := range errChan {
 		if downloadErr == nil {
 			downloadErr = e
 		}
+		if errors.Is(e, ErrRangeNotSupported) || (e != nil && strings.Contains(e.Error(), "range requests")) {
+			rangeNotSupported = true
+		}
+	}
+
+	if rangeNotSupported {
+		// Server refused range request during multi-part execution.
+		// Gracefully fallback to clean single-stream download!
+		task.Lock()
+		task.SupportsRange = false
+		task.NumConnections = 1
+		task.Downloaded = 0
+		task.Progress = 0
+		task.Chunks = []Chunk{
+			{
+				Index:      0,
+				Start:      0,
+				End:        task.TotalSize - 1,
+				Downloaded: 0,
+				Total:      task.TotalSize,
+				Status:     "downloading",
+			},
+		}
+		file := task.OutFile
+		task.Unlock()
+
+		if file != nil {
+			_ = file.Truncate(0)
+			_, _ = file.Seek(0, 0)
+		}
+
+		dm.executeSingleStreamDownload(ctx, task)
+		return
 	}
 
 	task.Lock()
 	if downloadErr != nil {
 		task.Status = StatusError
 		task.ErrorMessage = downloadErr.Error()
-	} else if task.Downloaded >= task.TotalSize {
-		task.Status = StatusCompleted
-		now := time.Now()
-		task.CompletedAt = &now
-		task.Progress = 100.0
+	} else {
+		allCompleted := true
+		for _, c := range task.Chunks {
+			if c.Status != "completed" {
+				allCompleted = false
+				break
+			}
+		}
+		if allCompleted || (task.TotalSize > 0 && task.Downloaded >= task.TotalSize) {
+			task.Status = StatusCompleted
+			now := time.Now()
+			task.CompletedAt = &now
+			task.Progress = 100.0
+			if task.TotalSize > 0 {
+				task.Downloaded = task.TotalSize
+			}
+		}
 	}
 	st := task.Status
 	task.Unlock()
@@ -952,6 +1020,22 @@ func (dm *DownloadManager) executeSingleStreamDownload(ctx context.Context, task
 		req.Header.Set(k, v)
 	}
 
+	task.Lock()
+	offset := task.Downloaded
+	if task.SupportsRange && offset > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
+	} else if offset > 0 {
+		// Server does not support range resume, restart cleanly from 0
+		offset = 0
+		task.Downloaded = 0
+		task.Progress = 0
+		if task.OutFile != nil {
+			_ = task.OutFile.Truncate(0)
+			_, _ = task.OutFile.Seek(0, 0)
+		}
+	}
+	task.Unlock()
+
 	resp, err := dm.client.Do(req)
 	if err != nil {
 		if ctx.Err() == nil {
@@ -972,6 +1056,32 @@ func (dm *DownloadManager) executeSingleStreamDownload(ctx context.Context, task
 		return
 	}
 
+	// If server ignored Range and returned 200 OK while offset > 0, restart from 0
+	if resp.StatusCode == http.StatusOK && offset > 0 {
+		offset = 0
+		task.Lock()
+		task.Downloaded = 0
+		task.Progress = 0
+		task.SupportsRange = false
+		if task.OutFile != nil {
+			_ = task.OutFile.Truncate(0)
+			_, _ = task.OutFile.Seek(0, 0)
+		}
+		task.Unlock()
+	}
+
+	if resp.ContentLength > 0 {
+		task.Lock()
+		if task.TotalSize <= 0 {
+			task.TotalSize = resp.ContentLength
+			if len(task.Chunks) > 0 {
+				task.Chunks[0].Total = resp.ContentLength
+				task.Chunks[0].End = resp.ContentLength - 1
+			}
+		}
+		task.Unlock()
+	}
+
 	buf := make([]byte, 64*1024)
 	for {
 		select {
@@ -984,15 +1094,20 @@ func (dm *DownloadManager) executeSingleStreamDownload(ctx context.Context, task
 		if n > 0 {
 			task.Lock()
 			file := task.OutFile
-			offset := task.Downloaded
+			currentOffset := offset
 			task.Unlock()
 
 			if file != nil {
-				_, _ = file.WriteAt(buf[:n], offset)
+				_, _ = file.WriteAt(buf[:n], currentOffset)
 			}
 
+			offset += int64(n)
+
 			task.Lock()
-			task.Downloaded += int64(n)
+			task.Downloaded = offset
+			if len(task.Chunks) > 0 {
+				task.Chunks[0].Downloaded = offset
+			}
 			task.UpdateProgress()
 			task.Unlock()
 
@@ -1014,6 +1129,14 @@ func (dm *DownloadManager) executeSingleStreamDownload(ctx context.Context, task
 	}
 
 	task.Lock()
+	if task.TotalSize <= 0 && task.Downloaded > 0 {
+		task.TotalSize = task.Downloaded
+	}
+	if len(task.Chunks) > 0 {
+		task.Chunks[0].Downloaded = task.Downloaded
+		task.Chunks[0].Total = task.TotalSize
+		task.Chunks[0].Status = "completed"
+	}
 	task.Status = StatusCompleted
 	now := time.Now()
 	task.CompletedAt = &now

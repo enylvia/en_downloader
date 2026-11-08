@@ -2,10 +2,14 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 )
+
+// ErrRangeNotSupported is returned when the server returns 200 OK instead of 206 Partial Content for a chunk range request.
+var ErrRangeNotSupported = errors.New("server does not support range requests (returned 200 OK)")
 
 type ChunkWorker struct {
 	client      *http.Client
@@ -63,7 +67,16 @@ func (w *ChunkWorker) Download(ctx context.Context) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
+	if resp.StatusCode == http.StatusOK {
+		// 200 OK means the server ignored the Range header and is returning the entire file from byte 0.
+		// If this is a multi-part download or chunk begins past byte 0, this chunk cannot be processed safely.
+		if len(w.task.Chunks) > 1 || rangeStart > 0 {
+			w.task.Lock()
+			w.task.Chunks[w.chunkIndex].Status = "error"
+			w.task.Unlock()
+			return ErrRangeNotSupported
+		}
+	} else if resp.StatusCode != http.StatusPartialContent {
 		w.task.Lock()
 		w.task.Chunks[w.chunkIndex].Status = "error"
 		w.task.Unlock()
@@ -72,6 +85,7 @@ func (w *ChunkWorker) Download(ctx context.Context) error {
 
 	buf := make([]byte, 32*1024) // 32KB read buffer for smoother rate limiting
 	currentOffset := rangeStart
+	bytesRemaining := chunk.End - currentOffset + 1
 
 	for {
 		select {
@@ -83,7 +97,16 @@ func (w *ChunkWorker) Download(ctx context.Context) error {
 		default:
 		}
 
-		n, readErr := resp.Body.Read(buf)
+		if bytesRemaining <= 0 {
+			break
+		}
+
+		toRead := len(buf)
+		if int64(toRead) > bytesRemaining {
+			toRead = int(bytesRemaining)
+		}
+
+		n, readErr := resp.Body.Read(buf[:toRead])
 		if n > 0 {
 			// Write directly to file at calculated byte offset
 			w.task.Lock()
@@ -103,10 +126,20 @@ func (w *ChunkWorker) Download(ctx context.Context) error {
 			}
 
 			currentOffset += int64(n)
+			bytesRemaining -= int64(n)
 
 			w.task.Lock()
 			w.task.Chunks[w.chunkIndex].Downloaded += int64(n)
-			w.task.Downloaded += int64(n)
+			if w.task.Chunks[w.chunkIndex].Downloaded > w.task.Chunks[w.chunkIndex].Total {
+				w.task.Chunks[w.chunkIndex].Downloaded = w.task.Chunks[w.chunkIndex].Total
+			}
+
+			// Sum all chunks for task.Downloaded to guarantee accuracy and prevent exceeding total size
+			var totalDownloaded int64
+			for _, c := range w.task.Chunks {
+				totalDownloaded += c.Downloaded
+			}
+			w.task.Downloaded = totalDownloaded
 			w.task.UpdateProgress()
 			w.task.Unlock()
 

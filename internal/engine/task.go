@@ -107,6 +107,9 @@ func (t *DownloadTask) RUnlock() {
 
 func (t *DownloadTask) UpdateProgress() {
 	if t.TotalSize > 0 {
+		if t.Downloaded > t.TotalSize {
+			t.Downloaded = t.TotalSize
+		}
 		t.Progress = float64(t.Downloaded) / float64(t.TotalSize) * 100.0
 		if t.Progress > 100.0 {
 			t.Progress = 100.0

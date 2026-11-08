@@ -113,13 +113,22 @@ function renderTasks() {
 
   container.innerHTML = filtered.map(t => {
     const isSelected = t.id === selectedTaskId;
-    const downloadedStr = formatBytes(t.downloaded);
+    const displayDownloaded = (t.total_size > 0 && t.downloaded > t.total_size) ? t.total_size : t.downloaded;
+    const downloadedStr = formatBytes(displayDownloaded);
     const totalStr = t.total_size > 0 ? formatBytes(t.total_size) : 'Tidak diketahui';
-    const remainingBytes = t.total_size - t.downloaded;
-    const remainingStr = remainingBytes > 0 ? `Tersisa ${formatBytes(remainingBytes)}` : 'Selesai';
+    const remainingBytes = t.total_size - displayDownloaded;
+    let remainingStr = '';
+    if (t.status === 'completed') {
+      remainingStr = 'Selesai';
+    } else if (remainingBytes > 0) {
+      remainingStr = `Tersisa ${formatBytes(remainingBytes)}`;
+    } else {
+      remainingStr = t.total_size > 0 ? 'Menyelesaikan...' : '';
+    }
     const speedStr = t.status === 'downloading' ? formatSpeed(t.speed) : '-';
     const etaStr = t.status === 'downloading' ? (t.eta || '--:--') : '--:--';
-    const threadsCount = (t.chunks && t.chunks.length > 0) ? t.chunks.length : (t.num_connections || 8);
+    const threadsCount = (t.chunks && t.chunks.length > 0) ? t.chunks.length : (t.num_connections || 1);
+    const threadsLabel = threadsCount > 1 ? `${threadsCount} Segmen Aktif` : '1 Aliran (Single)';
 
     let statusText = 'Mengunduh';
     let statusClass = t.status;
@@ -151,7 +160,7 @@ function renderTasks() {
         <div class="card-info">
           <div class="card-title" title="${escapeHtml(t.filename)}">${escapeHtml(t.filename)}</div>
           <div class="card-subtitle">
-            <span class="tag-cyan">${t.category} • ${threadsCount} Segmen Aktif</span>
+            <span class="tag-cyan">${t.category} • ${threadsLabel}</span>
             <span>${downloadedStr} / ${totalStr}</span>
             <span>&bull;</span>
             <span>${remainingStr}</span>
